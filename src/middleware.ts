@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { auth } from "@/auth";
 
 const protectedRoutes = ["/projects", "/settings"];
 const authRoutes = ["/signin", "/signup"];
-const apiRoutes = ["/api"];
-const publicApiRoutes = ["/api/auth/signup", "/api/auth/signin", "/api/auth/csrf", "/api/auth/providers", "/api/auth/session", "/api/auth/callback"];
+const publicApiRoutes = ["/api/auth"];
 
-export default auth((req) => {
+export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const sessionToken = req.cookies.get("next-auth.session-token")?.value
+    || req.cookies.get("__Secure-next-auth.session-token")?.value;
 
-  // Check if the route is an API route
-  const isApiRoute = apiRoutes.some((route) => pathname.startsWith(route));
-  const isPublicApiRoute = publicApiRoutes.some((route) => pathname.startsWith(route));
+  const isAuthenticated = !!sessionToken;
 
   // Check if the route is protected
   const isProtectedRoute = protectedRoutes.some((route) =>
@@ -22,20 +20,28 @@ export default auth((req) => {
   // Check if the route is an auth route
   const isAuthRoute = authRoutes.some((route) => pathname.startsWith(route));
 
+  // Check if the route is a public API route
+  const isPublicApiRoute = publicApiRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
+
+  // Check if the route is an API route
+  const isApiRoute = pathname.startsWith("/api");
+
   // If the user is not authenticated and trying to access a protected route
-  if (!req.auth && isProtectedRoute) {
+  if (!isAuthenticated && isProtectedRoute) {
     const signInUrl = new URL("/signin", req.url);
     signInUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(signInUrl);
   }
 
   // If the user is authenticated and trying to access an auth route
-  if (req.auth && isAuthRoute) {
+  if (isAuthenticated && isAuthRoute) {
     return NextResponse.redirect(new URL("/projects", req.url));
   }
 
   // For API routes, return 401 if not authenticated (skip public API routes)
-  if (isApiRoute && !isPublicApiRoute && !req.auth) {
+  if (isApiRoute && !isPublicApiRoute && !isAuthenticated) {
     return NextResponse.json(
       { error: { code: "UNAUTHORIZED", message: "Authentication required" } },
       { status: 401 }
@@ -43,7 +49,7 @@ export default auth((req) => {
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|public).*)"],

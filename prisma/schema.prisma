@@ -1,0 +1,596 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER & AUTHENTICATION
+// ============================================================================
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  name          String?
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  accounts  Account[]
+  sessions  Session[]
+  memberships OrganizationMember[]
+  projects  Project[]            @relation("ProjectOwner")
+  agentRuns AgentRun[]           @relation("AgentRunUser")
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id") @db.Uuid
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================================================
+// ORGANIZATION
+// ============================================================================
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  logoUrl   String?  @map("logo_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  members  OrganizationMember[]
+  projects Project[]
+
+  @@index([slug])
+  @@index([createdAt])
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  role           String   @default("MEMBER")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+// ============================================================================
+// PROJECT
+// ============================================================================
+
+model Project {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  ownerId        String   @map("owner_id") @db.Uuid
+  name           String
+  description    String?
+  mode           String   @default("BUSINESS")
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  // Relations
+  organization  Organization       @relation(fields: [organizationId], references: [id])
+  owner         User               @relation("ProjectOwner", fields: [ownerId], references: [id])
+  blueprints    BusinessBlueprint[]
+  requirements  Requirement[]
+  features      ProjectFeature[]
+  design        DesignArtifact[]
+  architecture  ArchitectureArtifact[]
+  agentRuns     AgentRun[]
+  artifacts     ProjectArtifact[]
+  versions      ProjectVersion[]
+  decisions     Decision[]
+  approvals     Approval[]
+  testRecords   TestRecord[]
+  verifications VerificationRecord[]
+  issues        KnownIssue[]
+  integrations  ProjectIntegration[]
+  deployments   Deployment[]
+  auditLogs     AuditLog[]
+
+  @@index([organizationId])
+  @@index([ownerId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("projects")
+}
+
+// ============================================================================
+// BLUEPRINT & REQUIREMENTS
+// ============================================================================
+
+model BusinessBlueprint {
+  id                  String   @id @default(uuid()) @db.Uuid
+  projectId           String   @map("project_id") @db.Uuid
+  version             Int
+  status              String   @default("DRAFT")
+  businessContextJson Json?    @map("business_context_json")
+  goalsJson           Json?    @map("goals_json")
+  personasJson        Json?    @map("personas_json")
+  rolesJson           Json?    @map("roles_json")
+  permissionsJson     Json?    @map("permissions_json")
+  featuresJson        Json?    @map("features_json")
+  entitiesJson        Json?    @map("entities_json")
+  workflowsJson       Json?    @map("workflows_json")
+  businessRulesJson   Json?    @map("business_rules_json")
+  integrationsJson    Json?    @map("integrations_json")
+  nfrJson             Json?    @map("nfr_json")
+  notes               String?
+  approvedAt          DateTime? @map("approved_at")
+  approvedBy          String?   @map("approved_by") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at")
+  createdBy           String    @map("created_by") @db.Uuid
+
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requirements Requirement[]
+  features     ProjectFeature[]
+
+  @@unique([projectId, version])
+  @@index([projectId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("business_blueprints")
+}
+
+model Requirement {
+  id                     String   @id @default(uuid()) @db.Uuid
+  projectId              String   @map("project_id") @db.Uuid
+  blueprintId            String?  @map("blueprint_id") @db.Uuid
+  requirementKey         String   @map("requirement_key")
+  category               String
+  title                  String
+  description            String
+  priority               String   @default("MUST")
+  status                 String   @default("PLANNED")
+  acceptanceCriteriaJson Json?    @map("acceptance_criteria_json")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  blueprint    BusinessBlueprint? @relation(fields: [blueprintId], references: [id])
+  features     ProjectFeature[] @relation("RequirementFeature")
+  testRecords  TestRecord[]
+  verifications VerificationRecord[]
+
+  @@unique([projectId, requirementKey])
+  @@index([projectId])
+  @@index([category])
+  @@index([priority])
+  @@index([status])
+  @@map("requirements")
+}
+
+model ProjectFeature {
+  id                  String   @id @default(uuid()) @db.Uuid
+  projectId           String   @map("project_id") @db.Uuid
+  blueprintId         String?  @map("blueprint_id") @db.Uuid
+  featureKey          String   @map("feature_key")
+  name                String
+  status              String   @default("PLANNED")
+  priority            String   @default("MUST")
+  description         String?
+  requirementIdsJson  Json?    @map("requirement_ids_json")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  blueprint    BusinessBlueprint? @relation(fields: [blueprintId], references: [id])
+  requirements Requirement[]   @relation("RequirementFeature")
+  testRecords  TestRecord[]
+  verifications VerificationRecord[]
+
+  @@unique([projectId, featureKey])
+  @@index([projectId])
+  @@index([status])
+  @@index([priority])
+  @@map("project_features")
+}
+
+// ============================================================================
+// DESIGN & ARCHITECTURE
+// ============================================================================
+
+model DesignArtifact {
+  id                  String   @id @default(uuid()) @db.Uuid
+  projectId           String   @map("project_id") @db.Uuid
+  version             Int
+  status              String   @default("DRAFT")
+  tokensJson          Json?    @map("tokens_json")
+  componentsJson      Json?    @map("components_json")
+  pagesJson           Json?    @map("pages_json")
+  statesJson          Json?    @map("states_json")
+  responsiveRulesJson Json?    @map("responsive_rules_json")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, version])
+  @@index([projectId])
+  @@map("design_artifacts")
+}
+
+model ArchitectureArtifact {
+  id              String   @id @default(uuid()) @db.Uuid
+  projectId       String   @map("project_id") @db.Uuid
+  version         Int
+  stackJson       Json?    @map("stack_json")
+  layersJson      Json?    @map("layers_json")
+  modulesJson     Json?    @map("modules_json")
+  apiPlanJson     Json?    @map("api_plan_json")
+  dataPlanJson    Json?    @map("data_plan_json")
+  securityPlanJson Json?   @map("security_plan_json")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, version])
+  @@index([projectId])
+  @@map("architecture_artifacts")
+}
+
+// ============================================================================
+// AGENT / AI
+// ============================================================================
+
+model AgentRun {
+  id                     String   @id @default(uuid()) @db.Uuid
+  projectId              String   @map("project_id") @db.Uuid
+  userId                 String   @map("user_id") @db.Uuid
+  taskType               String
+  agentType              String
+  status                 String   @default("QUEUED")
+  inputArtifactVersion   Int?     @map("input_artifact_version")
+  outputArtifactIdsJson  Json?    @map("output_artifact_ids_json")
+  provider               String?
+  model                  String?
+  tokenUsage             Json?    @map("token_usage")
+  estimatedCost          Float?   @map("estimated_cost")
+  errorCode              String?  @map("error_code")
+  errorMessage           String?  @map("error_message")
+  startedAt              DateTime? @map("started_at")
+  completedAt            DateTime? @map("completed_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User        @relation("AgentRunUser", fields: [userId], references: [id])
+  tasks     AgentTask[]
+  approvals Approval[]
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([status])
+  @@index([agentType])
+  @@index([createdAt])
+  @@map("agent_runs")
+}
+
+model AgentTask {
+  id                String   @id @default(uuid()) @db.Uuid
+  agentRunId        String   @map("agent_run_id") @db.Uuid
+  parentTaskId      String?  @map("parent_task_id") @db.Uuid
+  taskKey           String   @map("task_key")
+  name              String
+  status            String   @default("PENDING")
+  dependenciesJson  Json?    @map("dependencies_json")
+  riskLevel         String   @default("LOW")
+  attempts          Int      @default(0)
+  maxAttempts       Int      @default(3)
+  startedAt         DateTime? @map("started_at")
+  completedAt       DateTime? @map("completed_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  agentRun    AgentRun          @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  parentTask  AgentTask?        @relation("TaskHierarchy", fields: [parentTaskId], references: [id])
+  childTasks  AgentTask[]       @relation("TaskHierarchy")
+  artifacts   ProjectArtifact[]
+
+  @@index([agentRunId])
+  @@index([status])
+  @@index([riskLevel])
+  @@map("agent_tasks")
+}
+
+// ============================================================================
+// ARTIFACTS & VERSIONS
+// ============================================================================
+
+model ProjectArtifact {
+  id            String   @id @default(uuid()) @db.Uuid
+  projectId     String   @map("project_id") @db.Uuid
+  agentTaskId   String?  @map("agent_task_id") @db.Uuid
+  type          String
+  version       Int
+  filePath      String   @map("file_path")
+  contentRef    String   @map("content_ref")
+  checksum      String
+  metadataJson  Json?    @map("metadata_json")
+  createdBy     String   @map("created_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentTask AgentTask? @relation(fields: [agentTaskId], references: [id])
+
+  @@index([projectId])
+  @@index([type])
+  @@index([agentTaskId])
+  @@map("project_artifacts")
+}
+
+model ProjectVersion {
+  id                  String   @id @default(uuid()) @db.Uuid
+  projectId           String   @map("project_id") @db.Uuid
+  versionNumber       String   @map("version_number")
+  summary             String?
+  blueprintVersion    Int?     @map("blueprint_version")
+  designVersion       Int?     @map("design_version")
+  architectureVersion Int?     @map("architecture_version")
+  sourceRef           String?  @map("source_ref")
+  changelogJson       Json?    @map("changelog_json")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, versionNumber])
+  @@index([projectId])
+  @@index([createdAt])
+  @@map("project_versions")
+}
+
+// ============================================================================
+// DECISIONS & APPROVALS
+// ============================================================================
+
+model Decision {
+  id               String   @id @default(uuid()) @db.Uuid
+  projectId        String   @map("project_id") @db.Uuid
+  decisionKey      String   @map("decision_key")
+  title            String
+  status           String   @default("PROPOSED")
+  context          String
+  decision         String
+  alternativesJson Json?    @map("alternatives_json")
+  consequencesJson Json?    @map("consequences_json")
+  affectedAreasJson Json?   @map("affected_areas_json")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, decisionKey])
+  @@index([projectId])
+  @@index([status])
+  @@map("decisions")
+}
+
+model Approval {
+  id          String   @id @default(uuid()) @db.Uuid
+  projectId   String   @map("project_id") @db.Uuid
+  agentRunId  String?  @map("agent_run_id") @db.Uuid
+  actionType  String   @map("action_type")
+  riskLevel   String
+  summary     String
+  detailsJson Json?    @map("details_json")
+  impactJson  Json?    @map("impact_json")
+  status      String   @default("PENDING")
+  requestedBy String   @map("requested_by") @db.Uuid
+  approvedBy  String?  @map("approved_by") @db.Uuid
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  resolvedAt  DateTime? @map("resolved_at")
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentRun AgentRun? @relation(fields: [agentRunId], references: [id])
+
+  @@index([projectId])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([requestedBy])
+  @@map("approvals")
+}
+
+// ============================================================================
+// TESTING & VERIFICATION
+// ============================================================================
+
+model TestRecord {
+  id            String   @id @default(uuid()) @db.Uuid
+  projectId     String   @map("project_id") @db.Uuid
+  requirementId String?  @map("requirement_id") @db.Uuid
+  featureId     String?  @map("feature_id") @db.Uuid
+  testType      String
+  name          String
+  status        String   @default("PENDING")
+  commandRef    String?  @map("command_ref")
+  evidenceRef   String?  @map("evidence_ref")
+  durationMs    Int?     @map("duration_ms")
+  errorMessage  String?  @map("error_message")
+  createdAt     DateTime @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requirement Requirement?     @relation(fields: [requirementId], references: [id])
+  feature     ProjectFeature?  @relation(fields: [featureId], references: [id])
+
+  @@index([projectId])
+  @@index([requirementId])
+  @@index([featureId])
+  @@index([status])
+  @@index([testType])
+  @@map("test_records")
+}
+
+model VerificationRecord {
+  id               String   @id @default(uuid()) @db.Uuid
+  projectId        String   @map("project_id") @db.Uuid
+  featureId        String?  @map("feature_id") @db.Uuid
+  requirementId    String?  @map("requirement_id") @db.Uuid
+  verificationType String   @map("verification_type")
+  result           String   @default("PENDING")
+  evidence         Json?
+  issuesJson       Json?    @map("issues_json")
+  verifiedBy       String?  @map("verified_by") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  feature     ProjectFeature?  @relation(fields: [featureId], references: [id])
+  requirement Requirement?     @relation(fields: [requirementId], references: [id])
+
+  @@index([projectId])
+  @@index([featureId])
+  @@index([result])
+  @@map("verification_records")
+}
+
+model KnownIssue {
+  id                   String   @id @default(uuid()) @db.Uuid
+  projectId            String   @map("project_id") @db.Uuid
+  issueKey             String   @map("issue_key")
+  title                String
+  severity             String
+  description          String
+  reproductionSteps    String?  @map("reproduction_steps")
+  expectedBehavior     String?  @map("expected_behavior")
+  actualBehavior       String?  @map("actual_behavior")
+  status               String   @default("OPEN")
+  affectedFeaturesJson Json?    @map("affected_features_json")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, issueKey])
+  @@index([projectId])
+  @@index([severity])
+  @@index([status])
+  @@map("known_issues")
+}
+
+// ============================================================================
+// INTEGRATIONS & DEPLOYMENTS
+// ============================================================================
+
+model ProjectIntegration {
+  id                 String   @id @default(uuid()) @db.Uuid
+  projectId          String   @map("project_id") @db.Uuid
+  provider           String
+  type               String
+  status             String   @default("ACTIVE")
+  configMetadataJson Json?    @map("config_metadata_json")
+  lastSyncAt         DateTime? @map("last_sync_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([provider])
+  @@map("project_integrations")
+}
+
+model Deployment {
+  id              String   @id @default(uuid()) @db.Uuid
+  projectId       String   @map("project_id") @db.Uuid
+  environment     String
+  provider        String
+  status          String   @default("PENDING")
+  commitRef       String?  @map("commit_ref")
+  deploymentUrl   String?  @map("deployment_url")
+  healthStatus    String?
+  healthCheckedAt DateTime? @map("health_checked_at")
+  metadataJson    Json?    @map("metadata_json")
+  createdAt       DateTime @default(now()) @map("created_at")
+  completedAt     DateTime? @map("completed_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([environment])
+  @@index([status])
+  @@index([createdAt])
+  @@map("deployments")
+}
+
+// ============================================================================
+// AUDIT
+// ============================================================================
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  projectId   String?  @map("project_id") @db.Uuid
+  userId      String?  @map("user_id") @db.Uuid
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id") @db.Uuid
+  changesJson Json?    @map("changes_json")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  project Project? @relation(fields: [projectId], references: [id])
+  user    User?    @relation(fields: [userId], references: [id])
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

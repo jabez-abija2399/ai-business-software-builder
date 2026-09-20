@@ -5,6 +5,7 @@ import { getLatestApprovedBlueprint } from "@/server/db/blueprints";
 import {
   apiSuccess,
   apiCreated,
+  apiAccepted,
   apiUnauthorized,
   apiForbidden,
   apiNotFound,
@@ -110,7 +111,7 @@ export async function POST(
     );
 
     if (existingDeployment) {
-      return apiCreated({
+      return apiAccepted({
         status: "already_in_progress",
         deploymentId: existingDeployment.id,
         message: "Deployment already in progress.",

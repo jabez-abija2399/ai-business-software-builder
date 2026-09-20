@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
         name,
         email,
         emailVerified: new Date(),
+        passwordHash: hashedPassword,
       },
     });
 

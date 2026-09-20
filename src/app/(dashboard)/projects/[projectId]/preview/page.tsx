@@ -186,7 +186,7 @@ export default function PreviewPage({
         </div>
       )}
 
-      {preview && preview.status === "RUNNING" && (
+      {preview && ["PENDING", "BUILDING", "DEPLOYING", "LIVE"].includes(preview.status) && (
         <div className="mt-6 border rounded-lg p-6">
           <h2 className="font-semibold mb-4">Ready to Deploy?</h2>
           <p className="text-muted-foreground mb-4">
@@ -194,7 +194,7 @@ export default function PreviewPage({
           </p>
           <Link
             href={`/projects/${projectId}/deploy`}
-            className="inline-block bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90"
+            className="inline-block bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90 disabled:opacity-50"
           >
             Deploy to Production →
           </Link>

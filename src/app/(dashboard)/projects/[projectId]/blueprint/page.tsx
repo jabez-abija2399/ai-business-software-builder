@@ -3,6 +3,16 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface Blueprint {
   id: string;
@@ -15,6 +25,7 @@ interface Blueprint {
   featuresJson: Array<{ name: string; description: string; priority: string }>;
   entitiesJson: Array<{ name: string; description: string }>;
   workflowsJson: Array<{ name: string; description: string }>;
+  notes: string | null;
   createdAt: string;
 }
 
@@ -34,6 +45,9 @@ export default function BlueprintPage({
     technicalPreference: "" as "" | "business" | "developer" | "mixed",
   });
   const [projectId, setProjectId] = useState<string>("");
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
 
   useEffect(() => {
     params.then((p) => setProjectId(p.projectId));
@@ -53,6 +67,7 @@ export default function BlueprintPage({
       const data = await response.json();
       if (data.data) {
         setBlueprint(data.data);
+        setNotes(data.data.notes || "");
       }
     } catch (error) {
       console.error("Error fetching blueprint:", error);
@@ -85,14 +100,41 @@ export default function BlueprintPage({
 
       if (response.ok) {
         const data = await response.json();
-        // In production, this would start a WebSocket connection
-        // For now, we'll poll for updates
         alert(`Analysis started! Job ID: ${data.data.jobId}`);
       }
     } catch (error) {
       console.error("Error starting analysis:", error);
     } finally {
       setAnalyzing(false);
+    }
+  }
+
+  async function handleSaveNotes() {
+    if (!blueprint) return;
+    setSavingNotes(true);
+
+    try {
+      const response = await fetch(
+        `/api/projects/${projectId}/blueprint`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notes }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setBlueprint(data.data);
+        setEditDialogOpen(false);
+      } else {
+        alert("Failed to save notes");
+      }
+    } catch (error) {
+      console.error("Error saving notes:", error);
+      alert("Failed to save notes");
+    } finally {
+      setSavingNotes(false);
     }
   }
 
@@ -269,9 +311,35 @@ export default function BlueprintPage({
             </span>
           </p>
         </div>
-        <button className="border px-4 py-2 rounded-md font-medium hover:bg-accent">
-          Edit Blueprint
-        </button>
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogTrigger asChild>
+            <button className="border px-4 py-2 rounded-md font-medium hover:bg-accent">
+              Edit Blueprint
+            </button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Blueprint</DialogTitle>
+              <DialogDescription>
+                Update the notes for this blueprint. This is a free-form field for additional context.
+              </DialogDescription>
+            </DialogHeader>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md bg-background text-foreground min-h-[120px]"
+              placeholder="Add notes about this blueprint..."
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveNotes} disabled={savingNotes}>
+                {savingNotes ? "Saving..." : "Save Notes"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Blueprint Summary Cards */}
@@ -370,6 +438,13 @@ export default function BlueprintPage({
           </div>
         )}
       </div>
+
+        {blueprint.notes && (
+          <div className="border rounded-lg p-4">
+            <h3 className="font-semibold mb-3">Notes</h3>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{blueprint.notes}</p>
+          </div>
+        )}
 
       {/* Next Steps */}
       {blueprint.status === "APPROVED" && (

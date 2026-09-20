@@ -56,6 +56,35 @@ export async function GET(
     const totalTests = testRecords.length;
     const coverage = totalTests > 0 ? Math.round((passedTests / totalTests) * 100) : 0;
 
+    const securityTests = testRecords.filter((t) => t.testType === "SECURITY");
+    const accessibilityTests = testRecords.filter((t) => t.testType === "ACCESSIBILITY");
+    const performanceTests = testRecords.filter((t) => t.testType === "PERFORMANCE");
+
+    const securityScore =
+      securityTests.length > 0
+        ? Math.round(
+            (securityTests.filter((t) => t.status === "PASSED").length /
+              securityTests.length) *
+              100
+          )
+        : 0;
+    const accessibilityScore =
+      accessibilityTests.length > 0
+        ? Math.round(
+            (accessibilityTests.filter((t) => t.status === "PASSED").length /
+              accessibilityTests.length) *
+              100
+          )
+        : 0;
+    const performanceScore =
+      performanceTests.length > 0
+        ? Math.round(
+            (performanceTests.filter((t) => t.status === "PASSED").length /
+              performanceTests.length) *
+              100
+          )
+        : 0;
+
     return apiSuccess({
       overallScore: coverage,
       tests: {
@@ -64,18 +93,18 @@ export async function GET(
         coverage,
       },
       security: {
-        score: 0,
-        vulnerabilities: 0,
+        score: securityScore,
+        vulnerabilities: securityTests.filter((t) => t.status === "FAILED").length,
       },
       accessibility: {
-        score: 0,
-        issues: 0,
+        score: accessibilityScore,
+        issues: accessibilityTests.filter((t) => t.status === "FAILED").length,
       },
       performance: {
-        score: 0,
-        lcp: 0,
-        fid: 0,
-        cls: 0,
+        score: performanceScore,
+        lcp: performanceTests.length > 0 ? 0 : 0,
+        fid: performanceTests.length > 0 ? 0 : 0,
+        cls: performanceTests.length > 0 ? 0 : 0,
       },
     });
   } catch (error) {

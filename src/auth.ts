@@ -3,6 +3,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import Google from "next-auth/providers/google";
 import GitHub from "next-auth/providers/github";
 import Credentials from "next-auth/providers/credentials";
+import { hash, compare } from "bcryptjs";
 import prisma from "@/lib/prisma";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -31,12 +32,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { email: credentials.email as string },
         });
 
-        if (!user) {
+        if (!user || !user.passwordHash) {
           return null;
         }
 
-        // In production, verify password with bcrypt
-        // For now, return the user if they exist
+        const isPasswordValid = await compare(
+          credentials.password as string,
+          user.passwordHash
+        );
+
+        if (!isPasswordValid) {
+          return null;
+        }
+
         return {
           id: user.id,
           email: user.email,

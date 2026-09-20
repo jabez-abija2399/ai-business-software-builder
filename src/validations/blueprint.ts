@@ -96,7 +96,7 @@ export const integrationSchema = z.object({
 });
 
 export const nfrSchema = z.object({
-  category: z.enum(["performance", "security", "scalability", "usailability", "reliability"]),
+  category: z.enum(["performance", "security", "scalability", "usability", "reliability"]),
   requirement: z.string(),
   metric: z.string().optional(),
   target: z.string().optional(),

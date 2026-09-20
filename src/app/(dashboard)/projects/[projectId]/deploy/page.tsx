@@ -143,14 +143,14 @@ export default function DeployPage({
               <div key={deployment.id} className="p-4 flex items-center gap-4">
                 <span
                   className={`text-xl ${
-                    deployment.status === "SUCCESS"
+                    deployment.status === "LIVE"
                       ? "text-green-600"
                       : deployment.status === "FAILED"
                       ? "text-red-600"
                       : "text-yellow-600"
                   }`}
                 >
-                  {deployment.status === "SUCCESS"
+                  {deployment.status === "LIVE"
                     ? "✅"
                     : deployment.status === "FAILED"
                     ? "❌"
@@ -176,7 +176,7 @@ export default function DeployPage({
                 )}
                 <span
                   className={`text-xs px-2 py-1 rounded ${
-                    deployment.status === "SUCCESS"
+                    deployment.status === "LIVE"
                       ? "bg-green-100 text-green-800"
                       : deployment.status === "FAILED"
                       ? "bg-red-100 text-red-800"

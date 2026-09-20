@@ -4,47 +4,92 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { z } from "zod";
+
+const signupSchema = z
+  .object({
+    name: z.string().min(1, "Name is required"),
+    email: z.string().email("Invalid email address"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+      .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+      .regex(/[0-9]/, "Password must contain at least one number"),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+type SignupFormData = z.infer<typeof signupSchema>;
 
 export default function SignUpPage() {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState<SignupFormData>({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [errors, setErrors] = useState<Partial<Record<keyof SignupFormData, string>>>({});
+  const [apiError, setApiError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const validate = (): boolean => {
+    const result = signupSchema.safeParse(formData);
+    if (!result.success) {
+      const fieldErrors: Partial<Record<keyof SignupFormData, string>> = {};
+      for (const issue of result.error.issues) {
+        const field = issue.path[0] as keyof SignupFormData;
+        fieldErrors[field] = issue.message;
+      }
+      setErrors(fieldErrors);
+      return false;
+    }
+    setErrors({});
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setApiError(null);
+
+    if (!validate()) return;
+
     setLoading(true);
 
     try {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+        }),
       });
 
       if (response.ok) {
-        // Auto sign in after signup
         const result = await signIn("credentials", {
-          email,
-          password,
+          email: formData.email,
+          password: formData.password,
           redirect: false,
         });
 
         if (result?.error) {
-          setError("Account created but sign in failed. Please try signing in.");
+          setApiError("Account created but sign in failed. Please try signing in.");
         } else {
           router.push("/projects");
           router.refresh();
         }
       } else {
         const data = await response.json();
-        setError(data.error?.message || "Failed to create account");
+        setApiError(data.error?.message || "Failed to create account");
       }
     } catch {
-      setError("An error occurred. Please try again.");
+      setApiError("An error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -71,9 +116,9 @@ export default function SignUpPage() {
         </div>
 
         <div className="bg-card border rounded-lg p-6">
-          {error && (
+          {apiError && (
             <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
-              {error}
+              {apiError}
             </div>
           )}
 
@@ -88,12 +133,17 @@ export default function SignUpPage() {
               <input
                 id="name"
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
-                className="w-full px-3 py-2 border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className={`w-full px-3 py-2 border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
+                  errors.name ? "border-destructive" : ""
+                }`}
                 placeholder="Your name"
               />
+              {errors.name && (
+                <p className="text-xs text-destructive mt-1">{errors.name}</p>
+              )}
             </div>
 
             <div>
@@ -106,12 +156,17 @@ export default function SignUpPage() {
               <input
                 id="email"
                 type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
-                className="w-full px-3 py-2 border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className={`w-full px-3 py-2 border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
+                  errors.email ? "border-destructive" : ""
+                }`}
                 placeholder="you@example.com"
               />
+              {errors.email && (
+                <p className="text-xs text-destructive mt-1">{errors.email}</p>
+              )}
             </div>
 
             <div>
@@ -124,16 +179,44 @@ export default function SignUpPage() {
               <input
                 id="password"
                 type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required
                 minLength={8}
-                className="w-full px-3 py-2 border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className={`w-full px-3 py-2 border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
+                  errors.password ? "border-destructive" : ""
+                }`}
                 placeholder="••••••••"
               />
+              {errors.password && (
+                <p className="text-xs text-destructive mt-1">{errors.password}</p>
+              )}
               <p className="text-xs text-muted-foreground mt-1">
-                Must be at least 8 characters
+                Must be at least 8 characters with uppercase, lowercase, and number
               </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="confirmPassword"
+                className="block text-sm font-medium mb-1"
+              >
+                Confirm Password
+              </label>
+              <input
+                id="confirmPassword"
+                type="password"
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                required
+                className={`w-full px-3 py-2 border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
+                  errors.confirmPassword ? "border-destructive" : ""
+                }`}
+                placeholder="••••••••"
+              />
+              {errors.confirmPassword && (
+                <p className="text-xs text-destructive mt-1">{errors.confirmPassword}</p>
+              )}
             </div>
 
             <button

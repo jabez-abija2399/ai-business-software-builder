@@ -2,6 +2,13 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Blueprint {
   id: string;
@@ -28,6 +35,9 @@ export default function DesignPage({
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [projectId, setProjectId] = useState<string>("");
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [detailTitle, setDetailTitle] = useState("");
+  const [detailContent, setDetailContent] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     params.then((p) => setProjectId(p.projectId));
@@ -69,12 +79,19 @@ export default function DesignPage({
       );
       if (response.ok) {
         alert("Design generation started!");
+        fetchData();
       }
     } catch (error) {
       console.error("Error generating design:", error);
     } finally {
       setGenerating(false);
     }
+  }
+
+  function openDetail(title: string, content: Record<string, unknown>) {
+    setDetailTitle(title);
+    setDetailContent(content);
+    setDetailDialogOpen(true);
   }
 
   if (loading) {
@@ -127,13 +144,9 @@ export default function DesignPage({
           </p>
         </div>
         {!design && (
-          <button
-            onClick={handleGenerateDesign}
-            disabled={generating}
-            className="bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90 disabled:opacity-50"
-          >
+          <Button onClick={handleGenerateDesign} disabled={generating}>
             {generating ? "Generating..." : "Generate Design"}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -144,13 +157,9 @@ export default function DesignPage({
           <p className="text-muted-foreground mb-4">
             Generate a design based on your approved blueprint.
           </p>
-          <button
-            onClick={handleGenerateDesign}
-            disabled={generating}
-            className="bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90 disabled:opacity-50"
-          >
+          <Button onClick={handleGenerateDesign} disabled={generating}>
             {generating ? "Generating..." : "Generate Design"}
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -159,9 +168,13 @@ export default function DesignPage({
             <p className="text-sm text-muted-foreground">
               {Object.keys(design.uiJson).length} components defined
             </p>
-            <button className="text-sm text-primary mt-2 hover:underline">
+            <Button
+              variant="link"
+              className="text-sm text-primary mt-2 p-0 h-auto"
+              onClick={() => openDetail("UI Design", design.uiJson)}
+            >
               View Details →
-            </button>
+            </Button>
           </div>
 
           <div className="border rounded-lg p-4">
@@ -169,9 +182,13 @@ export default function DesignPage({
             <p className="text-sm text-muted-foreground">
               {Object.keys(design.uxJson).length} screens mapped
             </p>
-            <button className="text-sm text-primary mt-2 hover:underline">
+            <Button
+              variant="link"
+              className="text-sm text-primary mt-2 p-0 h-auto"
+              onClick={() => openDetail("UX Flow", design.uxJson)}
+            >
               View Details →
-            </button>
+            </Button>
           </div>
 
           <div className="border rounded-lg p-4">
@@ -179,9 +196,13 @@ export default function DesignPage({
             <p className="text-sm text-muted-foreground">
               {Object.keys(design.architectureJson).length} services defined
             </p>
-            <button className="text-sm text-primary mt-2 hover:underline">
+            <Button
+              variant="link"
+              className="text-sm text-primary mt-2 p-0 h-auto"
+              onClick={() => openDetail("Architecture", design.architectureJson)}
+            >
               View Details →
-            </button>
+            </Button>
           </div>
 
           <div className="border rounded-lg p-4">
@@ -189,12 +210,27 @@ export default function DesignPage({
             <p className="text-sm text-muted-foreground">
               {Object.keys(design.databaseJson).length} entities defined
             </p>
-            <button className="text-sm text-primary mt-2 hover:underline">
+            <Button
+              variant="link"
+              className="text-sm text-primary mt-2 p-0 h-auto"
+              onClick={() => openDetail("Database", design.databaseJson)}
+            >
               View Details →
-            </button>
+            </Button>
           </div>
         </div>
       )}
+
+      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{detailTitle}</DialogTitle>
+          </DialogHeader>
+          <pre className="bg-muted p-4 rounded-md text-sm overflow-x-auto whitespace-pre-wrap">
+            {JSON.stringify(detailContent, null, 2)}
+          </pre>
+        </DialogContent>
+      </Dialog>
 
       {design && design.status === "APPROVED" && (
         <div className="mt-6 border rounded-lg p-6">

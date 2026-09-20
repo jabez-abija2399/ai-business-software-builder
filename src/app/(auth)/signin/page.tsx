@@ -101,6 +101,16 @@ export default function SignInPage() {
               />
             </div>
 
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" className="rounded" />
+                <span className="text-sm">Remember me</span>
+              </label>
+              <Link href="/forgot-password" className="text-sm text-primary hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+
             <button
               type="submit"
               disabled={loading}

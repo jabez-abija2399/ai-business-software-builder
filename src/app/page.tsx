@@ -1,33 +1,15 @@
 import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
+import { auth } from "@/auth";
+import { LandingHeader } from "@/components/landing/landing-header";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await auth();
+  const user = session?.user ?? null;
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold">AI</span>
-            </div>
-            <span className="font-semibold text-lg">Business Builder</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/signin"
-              className="text-sm text-muted-foreground hover:text-foreground"
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/signup"
-              className="text-sm bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90"
-            >
-              Get Started
-            </Link>
-          </div>
-        </div>
-      </header>
+      <LandingHeader user={user} />
 
       {/* Hero Section */}
       <main className="container mx-auto px-4 py-16">
@@ -41,18 +23,40 @@ export default function HomePage() {
             secure, deployable applications.
           </p>
           <div className="flex items-center justify-center gap-4">
-            <Link
-              href="/signup"
-              className="bg-primary text-primary-foreground px-6 py-3 rounded-md font-medium hover:bg-primary/90"
-            >
-              Start Building
-            </Link>
-            <Link
-              href="/signin"
-              className="border border-border px-6 py-3 rounded-md font-medium hover:bg-accent"
-            >
-              Sign In
-            </Link>
+            {user ? (
+              <>
+                <span className="sr-only">
+                  Signed in as {user.name ?? user.email}
+                </span>
+                <Link
+                  href="/projects"
+                  className={buttonVariants({ variant: "default", size: "lg" })}
+                >
+                  Open Dashboard
+                </Link>
+                <Link
+                  href="/projects"
+                  className={buttonVariants({ variant: "outline", size: "lg" })}
+                >
+                  Start a New Project
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/signup"
+                  className={buttonVariants({ variant: "default", size: "lg" })}
+                >
+                  Start Building
+                </Link>
+                <Link
+                  href="/signin"
+                  className={buttonVariants({ variant: "outline", size: "lg" })}
+                >
+                  Sign In
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
@@ -93,7 +97,10 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t mt-24">
         <div className="container mx-auto px-4 py-8 text-center text-sm text-muted-foreground">
-          <p>© 2026 AI Business Software Builder. All rights reserved.</p>
+          <p>
+            © 2026 AI Business Software Builder. All rights reserved.
+            {user ? ` — Welcome back, ${user.name ?? user.email}` : ""}
+          </p>
         </div>
       </footer>
     </div>

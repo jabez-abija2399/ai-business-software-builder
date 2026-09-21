@@ -40,6 +40,7 @@ const NAV_ITEMS = [
   { name: "Design", href: "/design", end: false },
   { name: "Build", href: "/build", end: false },
   { name: "Quality", href: "/quality", end: false },
+  { name: "Code", href: "/code", end: false },
   { name: "Preview", href: "/preview", end: false },
   { name: "Deploy", href: "/deploy", end: false },
 ] as const;

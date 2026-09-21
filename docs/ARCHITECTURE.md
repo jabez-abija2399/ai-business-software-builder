@@ -197,7 +197,8 @@ Database        →  Prisma + PostgreSQL
 
 ## 6. AI system design
 
-**Do not call `openai.chat.completions(...)` anywhere in the app.**
+**No AI provider SDK is called directly in the app** — everything goes through
+the registry in `src/server/ai` (see §7 for the implemented runtime).
 
 ```text
 AIService (src/server/ai)
@@ -210,19 +211,32 @@ AIService (src/server/ai)
  ├── repair()
  └── evaluate()
         ↓
-Model Router (routes by task cost/strength)
+Task Router (reasoning vs. tooling)
         ↓
-Provider Adapter (OpenAI / Anthropic / Google / OpenRouter / local)
+Provider Registry (src/server/ai/providers/registry.ts)
+   openai · openrouter · groq · xai · google · anthropic
+   mistral · deepseek · together · cerebras · deterministic
 ```
 
-Attach only the adapters you use. Route by task type:
+### Provider selection (implemented)
 
-| Task | Model tier |
+- **Active provider** is chosen by `FLEET_AI_PROVIDER=<id>`; otherwise the first
+  provider whose `<ID>_API_KEY` is present wins, in registry order
+  (openai → openrouter → groq → xai → google → anthropic → mistral → deepseek
+  → together → cerebras). Google accepts `GEMINI_API_KEY` **or** `GOOGLE_API_KEY`.
+  With no keys configured the deterministic provider remains the active default.
+- **Model** per provider: `<ID>_MODEL` override, otherwise the provider's default.
+- **Request shape** follows the provider: OpenAI-compatible (OpenAI, OpenRouter,
+  Groq, xAI, Google, Mistral, DeepSeek, Together, Cerebras) via the shared
+  adapter; Anthropic via the Messages API (`x-api-key` + `anthropic-version`).
+  `jsonMode` providers use `response_format: { type: "json_object" }`; the rest
+  pin JSON in the prompt and recover it with an `extractJson` parser.
+- **Routing by task tier** (implemented):
+
+| Task | Provider |
 |---|---|
-| Fast/cheap (classification, extraction) | small model |
-| Architecture / reasoning | strong reasoning model |
-| Code generation | coding model |
-| Security review | security/reasoning model |
+| Reasoning (`analyzeBlueprint`, `generateDesign`) | the selected hosted provider (falls back to deterministic) |
+| Tooling (code, quality, preview) | deterministic — file/analysis work, not model calls |
 
 A long AI job is never kept inside one HTTP request — it goes through the job system (§7).
 
@@ -246,12 +260,15 @@ User → API → Create AI Job → Queue → Worker → AI Agents
   process** via `npm run worker` (poll) or `npm run worker:once` (drain a
   batch). Entry: `src/worker.ts`. It is resilient to transient DB blips (backoff
   + retry instead of crashing).
-- **AIService:** `src/server/ai` — model router + provider adapters
-  (`deterministic` default; `openai` when `OPENAI_API_KEY` is set). Reasoning
+- **AIService:** `src/server/ai` — registry of provider adapters (OpenAI,
+  OpenRouter, Groq, Grok/xAI, Google Gemini, Anthropic, Mistral, DeepSeek,
+  Together, Cerebras + deterministic). Selection via `FLEET_AI_PROVIDER` or
+  first-configured key; model override per provider (`<ID>_MODEL`). Reasoning
   tasks (blueprint analysis, design) may use a hosted model; tooling tasks (code
   generation, quality checks, preview) run deterministically because they are
   file/analysis work. Every `AgentRun` records real `provider`/`model`
-  provenance.
+  provenance. Providers fail honestly when a key is missing: the run records
+  `FAILED` with a clear "not configured" reason.
 - **Workspace:** generated files land in `.fleet-workspace/<projectId>/`
   (gitignored, never served statically) and are recorded as `ProjectArtifact`
   rows with checksums. Previews are provisioned as real static HTML and served
@@ -310,8 +327,15 @@ Design generation → App generation → Preview: all driven by the worker
 (`src/server/jobs`), which now actually transitions runs and writes artifacts.
 See §7 for the runtime details.
 
-**Phase 3 — Workspace**
-Code workspace → GitHub → Testing → Repair loop
+**Phase 3 — Workspace** (Code workspace implemented; GitHub/testing/deploy next)
+Code workspace (`/code`) → GitHub → Testing → Repair loop
+
+Implemented: the Code workspace screen reads the **real** generated files from
+the worker's sandbox (latest artifact per path, honest "no longer on disk"
+state when content was purged), the check history per task type, and a **repair
+loop** (`/code/repair`) that re-queues genuinely failed build-task runs
+(`INSTALL_DEPENDENCIES` is exempt — it fails for environmental reasons, not
+code bugs).
 
 **Phase 4 — Release** (in progress)
 Deployment → Monitoring → Usage/analytics
@@ -355,12 +379,19 @@ stage extends the exact same discipline:
   ≥1 READY preview. `deploy/create` writes real `Deployment` rows for
   `staging`/`production`; the worker fails these honestly when no
   deployment provider is configured (explicit reason, `deploymentUrl` null).
+- **Code** (`/code`, `code/editor` GET + `code/repair` POST): requires an
+  APPROVED blueprint. `code/editor` returns the real `ProjectArtifact` rows
+  (newest per path) with content read from the worker's sandbox — files purged
+  from disk show "no longer on disk" with their recorded checksum, never
+  reconstructed content — plus the latest check run per task type and the
+  repairable set. `code/repair` re-queues only the genuinely failed build-task
+  runs (`INSTALL_DEPENDENCIES` excluded) and 409s while a build is in flight.
 
 Run-status vocabulary lives in `src/lib/pipeline.ts` and is shared by the API
 routes and feature modules. Server-side gate/access helpers live in
 `src/server/db/stage-shared.ts` (with per-stage editor-data modules
 `project-design.ts`, `project-build.ts`, `project-quality.ts`,
-`project-preview.ts`, `project-deploy.ts`).
+`project-preview.ts`, `project-deploy.ts`, `project-workspace.ts`).
 
 ---
 

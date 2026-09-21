@@ -1,7 +1,13 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import prisma from "@/lib/prisma";
 import { getProject } from "@/server/db/projects";
-import { createBlueprint, getLatestApprovedBlueprint } from "@/server/db/blueprints";
+import {
+  createBlueprint,
+  getLatestApprovedBlueprint,
+  getBlueprint,
+  updateBlueprint,
+} from "@/server/db/blueprints";
 import { analyzeBlueprintSchema } from "@/validations/blueprint";
 import {
   apiAccepted,
@@ -63,26 +69,44 @@ export async function POST(
       });
     }
 
-    // Create initial blueprint draft
-    const blueprint = await createBlueprint({
-      projectId,
-      createdBy: session.user.id,
-      businessContext: {
-        rawDescription: validationResult.data.businessDescription,
-        constraints: validationResult.data.constraints,
+    // Reuse the latest un-approved draft so retries don't create version spam;
+    // otherwise create the first draft for this project.
+    const latest = await getBlueprint(projectId);
+    const draft = latest && latest.status !== "APPROVED" ? latest : null;
+    const context = {
+      rawDescription: validationResult.data.businessDescription,
+      constraints: validationResult.data.constraints,
+    };
+    const blueprint =
+      draft ??
+      (await createBlueprint({
+        projectId,
+        createdBy: session.user.id,
+        businessContext: context,
+      }));
+
+    if (draft) {
+      await updateBlueprint(blueprint.id, { businessContext: context });
+    }
+
+    // Record the analysis as a real AgentRun so the Overview activity stream
+    // and metrics reflect actual work (never a fabricated job id).
+    const run = await prisma.agentRun.create({
+      data: {
+        projectId,
+        userId: session.user.id,
+        taskType: "BLUEPRINT_ANALYSIS",
+        agentType: "BLUEPRINT_ANALYST",
+        status: "QUEUED",
       },
+      select: { id: true },
     });
 
-    // In production, this would start an AI agent job
-    // For now, return the blueprint with a simulated job
-    const jobId = `job_${Date.now()}`;
-
     return apiAccepted({
-      jobId,
-      blueprintId: blueprint.id,
       status: "queued",
-      estimatedDurationSeconds: 120,
-      websocketUrl: `wss://api.example.com/ws/jobs/${jobId}`,
+      runId: run.id,
+      blueprintId: blueprint.id,
+      version: blueprint.version,
     });
   } catch (error) {
     console.error("Error analyzing blueprint:", error);

@@ -283,17 +283,55 @@ Build in vertical slices; each slice ends in a working, verified feature.
 **Phase 1 — Foundation** (mostly done)
 Foundation → Auth+RBAC → Projects → Blueprint → AI clarification → Blueprint persistence → Verification
 
-**Phase 2 — Generation**
+**Phase 2 — Generation** (in progress)
 Design generation → App generation → Preview
 
 **Phase 3 — Workspace**
 Code workspace → GitHub → Testing → Repair loop
 
-**Phase 4 — Release**
+**Phase 4 — Release** (in progress)
 Deployment → Monitoring → Usage/analytics
 
 **Phase 5 — Advanced**
 Advanced agents → Workflow engine → Integrations → Business AI (email, payments, etc.)
+
+### Current honest-state contract (post-blueprint pipeline)
+
+Every stage after the Blueprint renders **only genuinely persisted state** — it
+never fabricates progress, URLs, IDs, live previews, scores, or infrastructure.
+See `docs/design-brief-blueprint-screen.md` for the shared rules; each pipeline
+stage extends the exact same discipline:
+
+- **Design** (`/design`, `design/editor` GET + `design/generate` POST): requires
+  an APPROVED blueprint. `design/generate` creates a real `AgentRun`
+  (`DESIGN_GENERATION` / `DESIGN_AGENT`); the `DesignArtifact` (auto-incremented
+  version) is written when the run completes. States: locked → empty →
+  queued/running (polls the real run) → completed design → completed-no-content
+  → failed + retry.
+- **Build** (`/build`, `build/editor` GET + `build/start` POST): requires an
+  APPROVED blueprint. `build/start` creates the 10 `BUILD_TASK_TYPES` agent runs
+  (`CODE_GENERATOR`); `build/editor` returns **only** build-type runs (it never
+  aggregates runs from other stages, unlike the deleted `build/status` route).
+  Generated files are persisted as `ProjectArtifact` rows.
+- **Quality** (`/quality`, `quality/editor` GET + `quality/run` POST): requires
+  ≥1 COMPLETED build run. `quality/run` creates `TESTS`/`SECURITY`/
+  `ACCESSIBILITY`/`PERFORMANCE` runs; the screen aggregates **real
+  `TestRecord` rows only** — no overall score, coverage percentage, or
+  fabricated Lighthouse `lcp/fid/cls` (deleted `quality/report`).
+- **Preview** (`/preview`, `preview/editor` GET + `preview/create` POST):
+  requires ≥1 COMPLETED build run. `preview/create` writes one real
+  `Deployment` row (`environment: "preview"`); `deploymentUrl` stays `null`
+  until provisioning writes one. Never a `*.vercel.app` guess or fake
+  websocket.
+- **Deploy** (`/deploy`, `deploy/editor` GET + `deploy/create` POST): requires
+  ≥1 READY preview. `deploy/create` writes real `Deployment` rows for
+  `staging`/`production`, again with honest `deploymentUrl`.
+
+Run-status vocabulary lives in `src/lib/pipeline.ts` and is shared by the API
+routes and feature modules. Server-side gate/access helpers live in
+`src/server/db/stage-shared.ts` (with per-stage editor-data modules
+`project-design.ts`, `project-build.ts`, `project-quality.ts`,
+`project-preview.ts`, `project-deploy.ts`).
 
 ---
 

@@ -1,6 +1,13 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import prisma from "@/lib/prisma";
 import { getProject } from "@/server/db/projects";
+import {
+  BUILD_TASK_TYPES,
+  QUALITY_TASK_TYPES,
+  QUALITY_AGENT_TYPE,
+  IN_FLIGHT_RUN_STATUSES,
+} from "@/lib/pipeline";
 import {
   apiAccepted,
   apiUnauthorized,
@@ -9,10 +16,8 @@ import {
   apiInternalError,
 } from "@/lib/api-response";
 
-const QUALITY_CHECK_TYPES = ["TESTS", "SECURITY", "ACCESSIBILITY", "PERFORMANCE"];
-
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
@@ -29,58 +34,55 @@ export async function POST(
     }
 
     if (project.ownerId !== session.user.id) {
-      const membership = await import("@/lib/prisma").then((m) =>
-        m.default.organizationMember.findFirst({
-          where: {
-            userId: session.user.id,
-            organizationId: project.organizationId,
-          },
-        })
-      );
+      const membership = await prisma.organizationMember.findFirst({
+        where: {
+          userId: session.user.id,
+          organizationId: project.organizationId,
+        },
+        select: { id: true },
+      });
       if (!membership) return apiForbidden();
     }
 
-    // Check for existing in-progress quality check
-    const existingCheck = await import("@/lib/prisma").then((m) =>
-      m.default.agentRun.findFirst({
-        where: {
-          projectId,
-          taskType: { in: QUALITY_CHECK_TYPES },
-          status: { in: ["QUEUED", "IN_PROGRESS"] },
-        },
-      })
-    );
+    // Gate: quality checks only make sense once a build has actually completed.
+    const completedBuild = await prisma.agentRun.findFirst({
+      where: { projectId, taskType: { in: BUILD_TASK_TYPES }, status: "COMPLETED" },
+      select: { id: true },
+    });
+    if (!completedBuild) {
+      return apiNotFound("Completed build (required before running quality checks)");
+    }
 
-    if (existingCheck) {
+    const inFlight = await prisma.agentRun.findFirst({
+      where: {
+        projectId,
+        taskType: { in: QUALITY_TASK_TYPES },
+        status: { in: IN_FLIGHT_RUN_STATUSES },
+      },
+      select: { id: true },
+    });
+    if (inFlight) {
       return apiAccepted({
         status: "already_in_progress",
-        runId: existingCheck.id,
-        message: "Quality check already in progress.",
+        runId: inFlight.id,
+        message: "Quality checks are already queued or running.",
       });
     }
 
-    // Create quality check tasks
-    const tasks = await import("@/lib/prisma").then((m) =>
-      m.default.agentRun.createMany({
-        data: QUALITY_CHECK_TYPES.map((taskType) => ({
-          projectId,
-          taskType,
-          agentType: "QUALITY_CHECK",
-          status: "QUEUED",
-          userId: session.user.id,
-        })),
-      })
-    );
-
-    // In production, this would start quality check agents
-    const jobId = `quality_${Date.now()}`;
+    const result = await prisma.agentRun.createMany({
+      data: QUALITY_TASK_TYPES.map((taskType) => ({
+        projectId,
+        userId: session.user.id,
+        taskType,
+        agentType: QUALITY_AGENT_TYPE,
+        status: "QUEUED",
+      })),
+    });
 
     return apiAccepted({
-      jobId,
-      tasksCreated: tasks.count,
       status: "queued",
-      estimatedDurationSeconds: 120,
-      websocketUrl: `wss://api.example.com/ws/jobs/${jobId}`,
+      tasksCreated: result.count,
+      message: "Quality checks queued. Results are written as real test records when runs complete.",
     });
   } catch (error) {
     console.error("Error running quality checks:", error);

@@ -1,251 +1,39 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { type Metadata } from "next";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  dehydrate,
+  HydrationBoundary,
+  QueryClient,
+} from "@tanstack/react-query";
+import { getDesignEditorData } from "@/server/db/project-design";
+import { designEditorKey } from "@/features/design/lib/query-keys";
+import { DesignScreen } from "@/features/design/components/design-screen";
 
-interface Blueprint {
-  id: string;
-  status: string;
-  featuresJson: Array<{ name: string; description: string }>;
-}
+export const metadata: Metadata = {
+  title: "Design",
+};
 
-interface Design {
-  id: string;
-  status: string;
-  uiJson: Record<string, unknown>;
-  uxJson: Record<string, unknown>;
-  architectureJson: Record<string, unknown>;
-  databaseJson: Record<string, unknown>;
-}
-
-export default function DesignPage({
+export default async function DesignPage({
   params,
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
-  const [design, setDesign] = useState<Design | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
-  const [projectId, setProjectId] = useState<string>("");
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [detailTitle, setDetailTitle] = useState("");
-  const [detailContent, setDetailContent] = useState<Record<string, unknown> | null>(null);
+  const { projectId } = await params;
 
-  useEffect(() => {
-    params.then((p) => setProjectId(p.projectId));
-  }, [params]);
-
-  useEffect(() => {
-    if (projectId) {
-      fetchData();
-    }
-  }, [projectId]);
-
-  async function fetchData() {
-    try {
-      const [blueprintRes, designRes] = await Promise.all([
-        fetch(`/api/projects/${projectId}/blueprint`),
-        fetch(`/api/projects/${projectId}/design`),
-      ]);
-
-      const blueprintData = await blueprintRes.json();
-      setBlueprint(blueprintData.data);
-
-      if (designRes.ok) {
-        const designData = await designRes.json();
-        setDesign(designData.data);
-      }
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleGenerateDesign() {
-    setGenerating(true);
-    try {
-      const response = await fetch(
-        `/api/projects/${projectId}/design/generate`,
-        { method: "POST" }
-      );
-      if (response.ok) {
-        alert("Design generation started!");
-        fetchData();
-      }
-    } catch (error) {
-      console.error("Error generating design:", error);
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  function openDetail(title: string, content: Record<string, unknown>) {
-    setDetailTitle(title);
-    setDetailContent(content);
-    setDetailDialogOpen(true);
-  }
-
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <div className="h-8 w-64 bg-muted rounded animate-pulse"></div>
-        <div className="h-64 bg-muted rounded-lg animate-pulse"></div>
-      </div>
-    );
-  }
-
-  if (!blueprint || blueprint.status !== "APPROVED") {
-    return (
-      <div className="text-center py-12">
-        <div className="text-4xl mb-4">📋</div>
-        <h2 className="text-lg font-semibold mb-2">
-          Blueprint Required
-        </h2>
-        <p className="text-muted-foreground mb-4">
-          You need an approved blueprint before generating the design.
-        </p>
-        <Link
-          href={`/projects/${projectId}/blueprint`}
-          className="inline-block bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90"
-        >
-          Go to Blueprint
-        </Link>
-      </div>
-    );
-  }
+  const queryClient = new QueryClient();
+  await queryClient
+    .prefetchQuery({
+      queryKey: designEditorKey(projectId),
+      queryFn: async () => {
+        const { auth } = await import("@/auth");
+        const session = await auth();
+        return getDesignEditorData(projectId, session?.user?.id ?? "");
+      },
+    })
+    .catch(() => undefined);
 
   return (
-    <div>
-      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-        <Link
-          href={`/projects/${projectId}`}
-          className="hover:text-foreground"
-        >
-          Project
-        </Link>
-        <span>/</span>
-        <span>Design</span>
-      </div>
-
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Design</h1>
-          <p className="text-muted-foreground">
-            UI/UX, Architecture, and Database Design
-          </p>
-        </div>
-        {!design && (
-          <Button onClick={handleGenerateDesign} disabled={generating}>
-            {generating ? "Generating..." : "Generate Design"}
-          </Button>
-        )}
-      </div>
-
-      {!design ? (
-        <div className="text-center py-12 border rounded-lg">
-          <div className="text-4xl mb-4">🎨</div>
-          <h2 className="text-lg font-semibold mb-2">No Design Yet</h2>
-          <p className="text-muted-foreground mb-4">
-            Generate a design based on your approved blueprint.
-          </p>
-          <Button onClick={handleGenerateDesign} disabled={generating}>
-            {generating ? "Generating..." : "Generate Design"}
-          </Button>
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="border rounded-lg p-4">
-            <h3 className="font-semibold mb-2">UI Design</h3>
-            <p className="text-sm text-muted-foreground">
-              {Object.keys(design.uiJson).length} components defined
-            </p>
-            <Button
-              variant="link"
-              className="text-sm text-primary mt-2 p-0 h-auto"
-              onClick={() => openDetail("UI Design", design.uiJson)}
-            >
-              View Details →
-            </Button>
-          </div>
-
-          <div className="border rounded-lg p-4">
-            <h3 className="font-semibold mb-2">UX Flow</h3>
-            <p className="text-sm text-muted-foreground">
-              {Object.keys(design.uxJson).length} screens mapped
-            </p>
-            <Button
-              variant="link"
-              className="text-sm text-primary mt-2 p-0 h-auto"
-              onClick={() => openDetail("UX Flow", design.uxJson)}
-            >
-              View Details →
-            </Button>
-          </div>
-
-          <div className="border rounded-lg p-4">
-            <h3 className="font-semibold mb-2">Architecture</h3>
-            <p className="text-sm text-muted-foreground">
-              {Object.keys(design.architectureJson).length} services defined
-            </p>
-            <Button
-              variant="link"
-              className="text-sm text-primary mt-2 p-0 h-auto"
-              onClick={() => openDetail("Architecture", design.architectureJson)}
-            >
-              View Details →
-            </Button>
-          </div>
-
-          <div className="border rounded-lg p-4">
-            <h3 className="font-semibold mb-2">Database</h3>
-            <p className="text-sm text-muted-foreground">
-              {Object.keys(design.databaseJson).length} entities defined
-            </p>
-            <Button
-              variant="link"
-              className="text-sm text-primary mt-2 p-0 h-auto"
-              onClick={() => openDetail("Database", design.databaseJson)}
-            >
-              View Details →
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{detailTitle}</DialogTitle>
-          </DialogHeader>
-          <pre className="bg-muted p-4 rounded-md text-sm overflow-x-auto whitespace-pre-wrap">
-            {JSON.stringify(detailContent, null, 2)}
-          </pre>
-        </DialogContent>
-      </Dialog>
-
-      {design && design.status === "APPROVED" && (
-        <div className="mt-6 border rounded-lg p-6">
-          <h2 className="font-semibold mb-4">Next Steps</h2>
-          <p className="text-muted-foreground mb-4">
-            Your design is approved! Ready to start building.
-          </p>
-          <Link
-            href={`/projects/${projectId}/build`}
-            className="inline-block bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90"
-          >
-            Start Building →
-          </Link>
-        </div>
-      )}
-    </div>
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <DesignScreen projectId={projectId} />
+    </HydrationBoundary>
   );
 }

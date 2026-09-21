@@ -40,11 +40,14 @@ export function getPrimaryAction(projectId: string, lifecycle: Lifecycle): Prima
   if (!lifecycle.hasRuns) {
     return { label: "Start build", href: base("/build") };
   }
+  if (!lifecycle.hasQuality) {
+    return { label: "Run quality", href: base("/quality") };
+  }
   if (!lifecycle.hasDeployments) {
-    return { label: "Deploy project", href: base("/deploy") };
+    return { label: "Open preview", href: base("/preview") };
   }
   if (lifecycle.hasActiveDeployment) {
     return { label: "Open preview", href: base("/preview") };
   }
-  return { label: "Run quality", href: base("/quality") };
+  return { label: "Deploy project", href: base("/deploy") };
 }

@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import prisma from "@/lib/prisma";
 import { getProject } from "@/server/db/projects";
-import { getLatestApprovedBlueprint } from "@/server/db/blueprints";
+import { BUILD_TASK_TYPES, IN_FLIGHT_DEPLOYMENT_STATUSES } from "@/lib/pipeline";
 import {
   apiAccepted,
   apiUnauthorized,
@@ -11,7 +12,7 @@ import {
 } from "@/lib/api-response";
 
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
@@ -28,64 +29,58 @@ export async function POST(
     }
 
     if (project.ownerId !== session.user.id) {
-      const membership = await import("@/lib/prisma").then((m) =>
-        m.default.organizationMember.findFirst({
-          where: {
-            userId: session.user.id,
-            organizationId: project.organizationId,
-          },
-        })
-      );
+      const membership = await prisma.organizationMember.findFirst({
+        where: {
+          userId: session.user.id,
+          organizationId: project.organizationId,
+        },
+        select: { id: true },
+      });
       if (!membership) return apiForbidden();
     }
 
-    const blueprint = await getLatestApprovedBlueprint(projectId);
-    if (!blueprint) {
-      return apiNotFound("Approved blueprint (required before preview)");
+    // Gate: a preview only makes sense once a build has actually completed.
+    const completedBuild = await prisma.agentRun.findFirst({
+      where: { projectId, taskType: { in: BUILD_TASK_TYPES }, status: "COMPLETED" },
+      select: { id: true },
+    });
+    if (!completedBuild) {
+      return apiNotFound("Completed build (required before creating a preview)");
     }
 
-    // Check for existing in-progress preview
-    const existingPreview = await import("@/lib/prisma").then((m) =>
-      m.default.deployment.findFirst({
-        where: {
-          projectId,
-          environment: "preview",
-          status: { in: ["PENDING", "BUILDING", "DEPLOYING"] },
-        },
-      })
-    );
-
-    if (existingPreview) {
+    const inFlight = await prisma.deployment.findFirst({
+      where: {
+        projectId,
+        environment: "preview",
+        status: { in: IN_FLIGHT_DEPLOYMENT_STATUSES },
+      },
+      select: { id: true },
+    });
+    if (inFlight) {
       return apiAccepted({
         status: "already_in_progress",
-        deploymentId: existingPreview.id,
-        message: "Preview creation already in progress.",
+        deploymentId: inFlight.id,
+        message: "A preview deployment is already in progress.",
       });
     }
 
-    // Create preview deployment
-    const deployment = await import("@/lib/prisma").then((m) =>
-      m.default.deployment.create({
-        data: {
-          projectId,
-          environment: "preview",
-          status: "PENDING",
-          provider: "vercel",
-          deploymentUrl: `https://preview-${projectId.slice(0, 8)}.vercel.app`,
-        },
-      })
-    );
-
-    // In production, this would trigger a preview build
-    const jobId = `preview_${Date.now()}`;
+    // A real Deployment row. No URL is fabricated: it stays null until the
+    // provisioning system actually assigns one.
+    const deployment = await prisma.deployment.create({
+      data: {
+        projectId,
+        environment: "preview",
+        provider: "unconfigured",
+        status: "PENDING",
+        deploymentUrl: null,
+      },
+      select: { id: true },
+    });
 
     return apiAccepted({
-      jobId,
-      deploymentId: deployment.id,
-      url: deployment.deploymentUrl,
       status: "queued",
-      estimatedDurationSeconds: 120,
-      websocketUrl: `wss://api.example.com/ws/jobs/${jobId}`,
+      deploymentId: deployment.id,
+      message: "Preview deployment queued. A URL appears once provisioning completes.",
     });
   } catch (error) {
     console.error("Error creating preview:", error);

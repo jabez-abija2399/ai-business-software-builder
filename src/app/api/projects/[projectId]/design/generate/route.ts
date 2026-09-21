@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import prisma from "@/lib/prisma";
 import { getProject } from "@/server/db/projects";
 import { getLatestApprovedBlueprint } from "@/server/db/blueprints";
+import { DESIGN_TASK_TYPES, DESIGN_AGENT_TYPE, IN_FLIGHT_RUN_STATUSES } from "@/lib/pipeline";
 import {
   apiAccepted,
   apiUnauthorized,
@@ -11,7 +13,7 @@ import {
 } from "@/lib/api-response";
 
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
@@ -28,14 +30,13 @@ export async function POST(
     }
 
     if (project.ownerId !== session.user.id) {
-      const membership = await import("@/lib/prisma").then((m) =>
-        m.default.organizationMember.findFirst({
-          where: {
-            userId: session.user.id,
-            organizationId: project.organizationId,
-          },
-        })
-      );
+      const membership = await prisma.organizationMember.findFirst({
+        where: {
+          userId: session.user.id,
+          organizationId: project.organizationId,
+        },
+        select: { id: true },
+      });
       if (!membership) return apiForbidden();
     }
 
@@ -44,44 +45,39 @@ export async function POST(
       return apiNotFound("Approved blueprint (required before generating design)");
     }
 
-    // Check for existing in-progress design
-    const existingDesign = await import("@/lib/prisma").then((m) =>
-      m.default.designArtifact.findFirst({
-        where: {
-          projectId,
-          status: { in: ["QUEUED", "GENERATING"] },
-        },
-      })
-    );
-
-    if (existingDesign) {
+    // A single real queue slot per action: never a fabricated job id.
+    const inFlight = await prisma.agentRun.findFirst({
+      where: {
+        projectId,
+        taskType: { in: DESIGN_TASK_TYPES },
+        status: { in: IN_FLIGHT_RUN_STATUSES },
+      },
+      select: { id: true },
+    });
+    if (inFlight) {
       return apiAccepted({
         status: "already_in_progress",
-        designId: existingDesign.id,
-        message: "Design generation already in progress.",
+        runId: inFlight.id,
+        message: "Design generation is already queued or running.",
       });
     }
 
-    // Create design record
-    const design = await import("@/lib/prisma").then((m) =>
-      m.default.designArtifact.create({
-        data: {
-          projectId,
-          version: 1,
-          status: "QUEUED",
-        },
-      })
-    );
-
-    // In production, this would start an AI agent job
-    const jobId = `design_${Date.now()}`;
+    const run = await prisma.agentRun.create({
+      data: {
+        projectId,
+        userId: session.user.id,
+        taskType: DESIGN_TASK_TYPES[0],
+        agentType: DESIGN_AGENT_TYPE,
+        status: "QUEUED",
+        inputArtifactVersion: blueprint.version,
+      },
+      select: { id: true },
+    });
 
     return apiAccepted({
-      jobId,
-      designId: design.id,
       status: "queued",
-      estimatedDurationSeconds: 180,
-      websocketUrl: `wss://api.example.com/ws/jobs/${jobId}`,
+      runId: run.id,
+      message: "Design generation queued. The design artifact is written when the run completes.",
     });
   } catch (error) {
     console.error("Error generating design:", error);

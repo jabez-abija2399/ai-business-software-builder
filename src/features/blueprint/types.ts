@@ -31,6 +31,22 @@ export interface BlueprintEditorProject {
   isOwner: boolean;
 }
 
+/** Loose renderable shape of a persisted blueprint section. */
+export interface BlueprintSections {
+  businessContext: Record<string, unknown> | null;
+  goals: Array<Record<string, unknown>>;
+  personas: Array<Record<string, unknown>>;
+  roles: Array<Record<string, unknown>>;
+  permissions: Array<Record<string, unknown>>;
+  features: Array<Record<string, unknown>>;
+  entities: Array<Record<string, unknown>>;
+  workflows: Array<Record<string, unknown>>;
+  businessRules: Array<Record<string, unknown>>;
+  integrations: Array<Record<string, unknown>>;
+  nfrs: Array<Record<string, unknown>>;
+  notes: string | null;
+}
+
 export interface BlueprintEditorData {
   project: BlueprintEditorProject;
   latestBlueprint: {
@@ -38,15 +54,50 @@ export interface BlueprintEditorData {
     version: number;
     status: string;
     createdAt: string;
-    notes: string | null;
+    approvedAt: string | null;
     rawDescription: string | null;
-    hasRealContent: boolean;
+    hasContent: boolean;
+    sections: BlueprintSections;
   } | null;
   lastAnalysis: {
+    id: string | null;
     status: BlueprintAnalysisStatus;
     createdAt: string;
+    startedAt: string | null;
+    completedAt: string | null;
     errorMessage: string | null;
+    errorCode: string | null;
   } | null;
+  versions: {
+    version: number;
+    status: string;
+    createdAt: string;
+    approvedAt: string | null;
+  }[];
+  decisions: {
+    id: string;
+    decisionKey: string;
+    title: string;
+    status: string;
+    context: string | null;
+    decision: string | null;
+  }[];
+  knownIssues: {
+    id: string;
+    issueKey: string;
+    title: string;
+    severity: string;
+    status: string;
+    description: string | null;
+  }[];
 }
 
-export type BlueprintEditorMode = "empty" | "describe" | "running" | "failed" | "view";
+export interface ClarificationQuestion {
+  id: string;
+  question: string;
+}
+
+export interface BlueprintEditorMode {
+  /** 'empty' | 'describe' | 'running' | 'failed' | 'view' | 'clarify' */
+  kind: string;
+}

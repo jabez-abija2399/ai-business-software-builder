@@ -21,6 +21,28 @@ export interface BlueprintEditorProject {
   isOwner: boolean;
 }
 
+/** Loose renderable shape of a persisted blueprint section. */
+export type BlueprintSectionData =
+  | Record<string, unknown>
+  | Array<Record<string, unknown>>
+  | string
+  | null;
+
+export interface BlueprintSections {
+  businessContext: Record<string, unknown> | null;
+  goals: Array<Record<string, unknown>>;
+  personas: Array<Record<string, unknown>>;
+  roles: Array<Record<string, unknown>>;
+  permissions: Array<Record<string, unknown>>;
+  features: Array<Record<string, unknown>>;
+  entities: Array<Record<string, unknown>>;
+  workflows: Array<Record<string, unknown>>;
+  businessRules: Array<Record<string, unknown>>;
+  integrations: Array<Record<string, unknown>>;
+  nfrs: Array<Record<string, unknown>>;
+  notes: string | null;
+}
+
 export interface BlueprintEditorData {
   project: BlueprintEditorProject;
   /** Latest blueprint by version, if any exists yet. */
@@ -29,25 +51,63 @@ export interface BlueprintEditorData {
     version: number;
     status: string;
     createdAt: string;
-    notes: string | null;
+    approvedAt: string | null;
     /** Saved raw business description from the newest analysis attempt. */
     rawDescription: string | null;
-    /** True when blueprint sections beyond the raw description are populated. */
-    hasRealContent: boolean;
+    hasContent: boolean;
+    /** Full persisted specification sections (never invented). */
+    sections: BlueprintSections;
   } | null;
   /** Most recent real analysis run (AgentRun) for this project, if any. */
   lastAnalysis: {
+    id: string | null;
     status: BlueprintAnalysisStatus;
     createdAt: string;
+    startedAt: string | null;
+    completedAt: string | null;
     errorMessage: string | null;
+    errorCode: string | null;
   } | null;
+  /** Full persisted version history — used for read-only review of old drafts. */
+  versions: {
+    version: number;
+    status: string;
+    createdAt: string;
+    approvedAt: string | null;
+  }[];
+  /** Unresolved decisions (status PROPOSED) — real records only. */
+  decisions: { id: string; decisionKey: string; title: string; status: string; context: string | null; decision: string | null }[];
+  /** Open known issues (status OPEN) — real records only. */
+  knownIssues: {
+    id: string;
+    issueKey: string;
+    title: string;
+    severity: string;
+    status: string;
+    description: string | null;
+  }[];
+}
+
+function nonEmptyArray(value: unknown): value is Array<Record<string, unknown>> {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function parseSection(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? (value.filter((v) => v && typeof v === "object") as Array<Record<string, unknown>>) : [];
+}
+
+function parseContext(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
 /**
- * Loads everything the Blueprint screen needs to render §1 states honestly:
+ * Loads everything the Blueprint screen needs to render its states honestly:
  * - brand-new project, no description
  * - saved description but no analyzed blueprint
+ * - analysis in flight (real AgentRun)
  * - a previously failed analysis
+ * - an existing blueprint + versions to review
+ * - open decisions / known issues
  * Access (owner or org member) is enforced here; non-accessible projects
  * return null and the layout turns that into notFound().
  */
@@ -73,6 +133,7 @@ export async function getBlueprintEditorData(
           version: true,
           status: true,
           createdAt: true,
+          approvedAt: true,
           notes: true,
           businessContextJson: true,
           goalsJson: true,
@@ -104,30 +165,60 @@ export async function getBlueprintEditorData(
 
   if (!canEdit) return null;
 
-  const [lastAnalysis] = await prisma.$transaction([
+  const [lastAnalysis, versions, decisions, knownIssues] = await prisma.$transaction([
     prisma.agentRun.findFirst({
-      where: {
-        projectId,
-        taskType: "BLUEPRINT_ANALYSIS",
-      },
+      where: { projectId, taskType: "BLUEPRINT_ANALYSIS" },
       orderBy: { createdAt: "desc" },
       select: {
+        id: true,
         status: true,
         createdAt: true,
+        startedAt: true,
+        completedAt: true,
         errorMessage: true,
+        errorCode: true,
+      },
+    }),
+    prisma.businessBlueprint.findMany({
+      where: { projectId },
+      orderBy: { version: "desc" },
+      select: {
+        version: true,
+        status: true,
+        createdAt: true,
+        approvedAt: true,
+      },
+    }),
+    prisma.decision.findMany({
+      where: { projectId, status: "PROPOSED" },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        decisionKey: true,
+        title: true,
+        status: true,
+        context: true,
+        decision: true,
+      },
+    }),
+    prisma.knownIssue.findMany({
+      where: { projectId, status: "OPEN" },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        issueKey: true,
+        title: true,
+        severity: true,
+        status: true,
+        description: true,
       },
     }),
   ]);
 
   const b = project.blueprints[0] ?? null;
-  const rawDescription = (() => {
-    if (!b) return null;
-    const ctx = b.businessContextJson as Record<string, unknown> | null;
-    return typeof ctx?.rawDescription === "string" ? ctx.rawDescription : null;
-  })();
-
-  const sectionPopulated = (v: unknown) =>
-    Array.isArray(v) ? v.length > 0 : v != null;
+  const context = b ? parseContext(b.businessContextJson) : null;
+  const rawDescription =
+    typeof context?.rawDescription === "string" ? context.rawDescription : null;
 
   return {
     project: {
@@ -145,9 +236,23 @@ export async function getBlueprintEditorData(
           version: b.version,
           status: b.status,
           createdAt: b.createdAt.toISOString(),
-          notes: b.notes,
+          approvedAt: b.approvedAt?.toISOString() ?? null,
           rawDescription,
-          hasRealContent: [
+          sections: {
+            businessContext: context,
+            goals: parseSection(b.goalsJson),
+            personas: parseSection(b.personasJson),
+            roles: parseSection(b.rolesJson),
+            permissions: parseSection(b.permissionsJson),
+            features: parseSection(b.featuresJson),
+            entities: parseSection(b.entitiesJson),
+            workflows: parseSection(b.workflowsJson),
+            businessRules: parseSection(b.businessRulesJson),
+            integrations: parseSection(b.integrationsJson),
+            nfrs: parseSection(b.nfrJson),
+            notes: b.notes,
+          },
+          hasContent: [
             b.goalsJson,
             b.personasJson,
             b.rolesJson,
@@ -158,15 +263,27 @@ export async function getBlueprintEditorData(
             b.businessRulesJson,
             b.integrationsJson,
             b.nfrJson,
-          ].some(sectionPopulated),
+          ].some(nonEmptyArray),
         }
       : null,
     lastAnalysis: lastAnalysis
       ? {
+          id: lastAnalysis.id,
           status: lastAnalysis.status as BlueprintAnalysisStatus,
           createdAt: lastAnalysis.createdAt.toISOString(),
+          startedAt: lastAnalysis.startedAt?.toISOString() ?? null,
+          completedAt: lastAnalysis.completedAt?.toISOString() ?? null,
           errorMessage: lastAnalysis.errorMessage,
+          errorCode: lastAnalysis.errorCode,
         }
       : null,
+    versions: versions.map((v) => ({
+      version: v.version,
+      status: v.status,
+      createdAt: v.createdAt.toISOString(),
+      approvedAt: v.approvedAt?.toISOString() ?? null,
+    })),
+    decisions,
+    knownIssues,
   };
 }

@@ -124,8 +124,8 @@ export const updateBlueprintSchema = createBlueprintSchema.extend({
 export const analyzeBlueprintSchema = z.object({
   businessDescription: z
     .string()
-    .min(10, "Please provide more details about your business")
-    .max(2000, "Description must be at most 2000 characters"),
+    .min(20, "Add a little more detail so Fleet can understand what you're building.")
+    .max(20000, "Description must be at most 20,000 characters"),
   constraints: z
     .object({
       budget: z.enum(["low", "medium", "high"]).optional(),

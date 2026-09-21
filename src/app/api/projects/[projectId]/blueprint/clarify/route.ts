@@ -5,7 +5,6 @@ import { getBlueprint, updateBlueprint } from "@/server/db/blueprints";
 import { clarifyBlueprintSchema } from "@/validations/blueprint";
 import {
   apiSuccess,
-  apiAccepted,
   apiUnauthorized,
   apiForbidden,
   apiNotFound,
@@ -57,9 +56,17 @@ export async function POST(
       return apiValidationError("Cannot clarify an approved blueprint");
     }
 
-    // Store clarification answers
+    // Clarification answers live on the real draft; question IDs come from
+    // pendingQuestions so the loop reconciles with persisted state.
     const currentContext = (blueprint.businessContextJson as Record<string, unknown>) || {};
-    const existingClarifications = (currentContext.clarifications as Array<Record<string, unknown>>) || [];
+    const existingClarifications = Array.isArray(currentContext.clarifications)
+      ? (currentContext.clarifications as Array<Record<string, unknown>>)
+      : [];
+    const existingPending = Array.isArray(currentContext.pendingQuestions)
+      ? (currentContext.pendingQuestions as Array<Record<string, unknown>>)
+      : [];
+
+    const answeredIds = new Set(validationResult.data.answers.map((a) => a.questionId));
 
     const updatedClarifications = [
       ...existingClarifications,
@@ -70,21 +77,27 @@ export async function POST(
       })),
     ];
 
+    const remainingPending = existingPending.filter(
+      (q) => !answeredIds.has(String(q.id))
+    );
+
     await updateBlueprint(blueprint.id, {
       businessContext: {
         ...currentContext,
         clarifications: updatedClarifications,
+        ...(remainingPending.length > 0 ? { pendingQuestions: remainingPending } : {}),
       },
     });
 
-    // In production, this would trigger AI to re-analyze with new answers
-    const jobId = `clarify_${Date.now()}`;
-
-    return apiAccepted({
-      jobId,
+    return apiSuccess({
       blueprintId: blueprint.id,
-      status: "processing",
-      message: "Clarifications submitted. AI is re-analyzing your blueprint.",
+      version: blueprint.version,
+      answered: validationResult.data.answers.length,
+      pending: remainingPending.length,
+      message:
+        remainingPending.length > 0
+          ? "Answer submitted."
+          : "All clarification answers submitted.",
     });
   } catch (error) {
     console.error("Error submitting clarifications:", error);

@@ -9,10 +9,12 @@ import { handleBlueprintAnalysis } from "./blueprint";
 import { handleDesignGeneration } from "./design";
 import { handleBuildTask } from "./build";
 import { handleQualityCheck } from "./quality";
+import { handlePublishGitHub } from "./publish-github";
 import { HandlerError, type RunOutcome } from "./shared";
 
 export async function executeRun(run: ClaimedRun): Promise<RunOutcome> {
   if (run.taskType === "BLUEPRINT_ANALYSIS") return handleBlueprintAnalysis(run);
+  if (run.taskType === "GITHUB_PUBLISH") return handlePublishGitHub(run);
   if (DESIGN_TASK_TYPES.includes(run.taskType)) return handleDesignGeneration(run);
   if (BUILD_TASK_TYPES.includes(run.taskType)) return handleBuildTask(run);
   if (QUALITY_TASK_TYPES.includes(run.taskType)) return handleQualityCheck(run);

@@ -48,6 +48,15 @@ export interface WorkspaceEditorData {
   failedBuildTaskTypes: string[];
   repairAvailable: boolean;
   repairInFlight: boolean;
+  /** Latest real GitHub publish run (null if never published). */
+  publishRun: {
+    id: string;
+    status: string;
+    errorCode: string | null;
+    errorMessage: string | null;
+    createdAt: string;
+    completedAt: string | null;
+  } | null;
 }
 
 const CHECK_TASK_TYPES = ["RUN_LINT", "RUN_TYPECHECK", ...QUALITY_TASK_TYPES];
@@ -181,6 +190,19 @@ export async function getWorkspaceEditorData(
 
   const blueprint = project.blueprints.find((b) => b.status === "APPROVED") ?? null;
 
+  const publishRun = await prisma.agentRun.findFirst({
+    where: { projectId, taskType: "GITHUB_PUBLISH" },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      status: true,
+      errorCode: true,
+      errorMessage: true,
+      createdAt: true,
+      completedAt: true,
+    },
+  });
+
   return {
     project: {
       id: project.id,
@@ -211,5 +233,15 @@ export async function getWorkspaceEditorData(
     failedBuildTaskTypes,
     repairAvailable: Boolean(blueprint && !anyInFlight && repairCandidates.length > 0),
     repairInFlight: Boolean(anyInFlight),
+    publishRun: publishRun
+      ? {
+          id: publishRun.id,
+          status: publishRun.status,
+          errorCode: publishRun.errorCode,
+          errorMessage: publishRun.errorMessage,
+          createdAt: publishRun.createdAt.toISOString(),
+          completedAt: publishRun.completedAt?.toISOString() ?? null,
+        }
+      : null,
   };
 }

@@ -34,6 +34,9 @@ export const DESIGN_AGENT_TYPE = "DESIGN_AGENT" as const;
 export const BUILD_AGENT_TYPE = "CODE_GENERATOR" as const;
 export const QUALITY_AGENT_TYPE = "QUALITY_CHECK" as const;
 
+export const GITHUB_PUBLISH_TASK_TYPE = "GITHUB_PUBLISH" as const;
+export const GIT_AGENT_TYPE = "GIT_PUBLISHER" as const;
+
 export const QUALITY_TEST_TYPES: string[] = QUALITY_TASK_TYPES;
 
 /** AgentRun statuses that mean "still working" — poll while these are real. */

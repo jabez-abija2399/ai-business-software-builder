@@ -47,11 +47,28 @@ export interface WorkspaceEditorData {
   failedBuildTaskTypes: string[];
   repairAvailable: boolean;
   repairInFlight: boolean;
+  publishRun: PublishRun | null;
 }
 
 export interface RepairResult {
   status: string;
   tasksCreated: number;
   taskTypes: string[];
+  message: string;
+}
+
+export interface PublishRun {
+  id: string;
+  status: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface PublishResult {
+  status: string;
+  runId: string;
+  target: string;
   message: string;
 }

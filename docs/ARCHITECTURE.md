@@ -278,8 +278,11 @@ User → API → Create AI Job → Queue → Worker → AI Agents
   registry, `tsc --noEmit` and `vitest` inside each project workspace and
   persists their real output as `reports/*.log` artifacts. Without it, installs
   fail with an explicit `SANDBOX_UNAVAILABLE` reason (never fabricated
-  success). Staging/production deployments still fail with an explicit "no
-  provider configured" reason — both are truthful, actionable failures.
+  success). GitHub publishing is real when `GITHUB_TOKEN` is set — the worker
+  pushes via the Git Data API and records the real repo URL + commit sha;
+  otherwise the publish endpoint 409s with an explicit "not configured" reason.
+  Staging/production deployments still fail with an explicit "no provider
+  configured" reason — both are truthful, actionable failures.
 - Workers run **isolated** from the Next.js server.
 - CPU-risky work (npm install/test/build/lint, git) runs in a **sandbox worker**, never on the main server.
 
@@ -330,17 +333,18 @@ Design generation → App generation → Preview: all driven by the worker
 (`src/server/jobs`), which now actually transitions runs and writes artifacts.
 See §7 for the runtime details.
 
-**Phase 3 — Workspace** (Code workspace implemented; GitHub/testing/deploy next)
+**Phase 3 — Workspace** (Code workspace, testing + GitHub publish implemented)
 Code workspace (`/code`) → GitHub → Testing → Repair loop
 
 Implemented: the Code workspace screen reads the **real** generated files from
 the worker's sandbox (latest artifact per path, honest "no longer on disk"
-state when content was purged), the check history per task type, and a **repair
-loop** (`/code/repair`) that re-queues genuinely failed build-task runs.
-A **real local sandbox** (`FLEET_SANDBOX=local`) makes `INSTALL_DEPENDENCIES`,
-`RUN_TYPECHECK` and the quality `TESTS` task execute the actual generated
-project (`npm install`, `tsc --noEmit`, `vitest`) and report their genuine
-output; install is exempted from the repair loop because it can fail for
+state when content was purged), the check history per task type, a **repair
+loop** (`/code/repair`) that re-queues genuinely failed build-task runs, a
+**real local sandbox** (`FLEET_SANDBOX=local`) that executes the actual
+generated project (`npm install`, `tsc --noEmit`, `vitest`), and a **GitHub
+publish** (`/code/publish`, task `GITHUB_PUBLISH`) that pushes the real files
+to a repository via the Git Data API and records the real repo URL + commit
+sha. Install is exempted from the repair loop because it can fail for
 environmental reasons rather than code bugs.
 
 **Phase 4 — Release** (in progress)
@@ -385,13 +389,16 @@ stage extends the exact same discipline:
   ≥1 READY preview. `deploy/create` writes real `Deployment` rows for
   `staging`/`production`; the worker fails these honestly when no
   deployment provider is configured (explicit reason, `deploymentUrl` null).
-- **Code** (`/code`, `code/editor` GET + `code/repair` POST): requires an
-  APPROVED blueprint. `code/editor` returns the real `ProjectArtifact` rows
-  (newest per path) with content read from the worker's sandbox — files purged
-  from disk show "no longer on disk" with their recorded checksum, never
+- **Code** (`/code`, `code/editor` GET + `code/repair` + `code/publish` POST):
+  requires an APPROVED blueprint. `code/editor` returns the real `ProjectArtifact`
+  rows (newest per path) with content read from the worker's sandbox — files
+  purged from disk show "no longer on disk" with their recorded checksum, never
   reconstructed content — plus the latest check run per task type and the
   repairable set. `code/repair` re-queues only the genuinely failed build-task
   runs (`INSTALL_DEPENDENCIES` excluded) and 409s while a build is in flight.
+  `code/publish` queues a `GITHUB_PUBLISH` run that pushes the real files to a
+  GitHub repository (Git Data API) and records the real repo URL + commit sha
+  in `reports/publish-github.log`.
 
 Run-status vocabulary lives in `src/lib/pipeline.ts` and is shared by the API
 routes and feature modules. Server-side gate/access helpers live in

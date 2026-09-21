@@ -1,4 +1,4 @@
-import type { RepairResult, WorkspaceEditorData } from "./types";
+import type { PublishResult, RepairResult, WorkspaceEditorData } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -42,5 +42,15 @@ export async function repairFailedTasks(projectId: string): Promise<RepairResult
   });
   if (!res.ok) throw await readError(res);
   const body = (await res.json()) as { data: RepairResult };
+  return body.data;
+}
+
+export async function publishToGitHub(projectId: string): Promise<PublishResult> {
+  const res = await fetch(`/api/projects/${projectId}/code/publish`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw await readError(res);
+  const body = (await res.json()) as { data: PublishResult };
   return body.data;
 }

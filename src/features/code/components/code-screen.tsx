@@ -8,7 +8,8 @@ import { LockedStage } from "../../pipeline/components/locked-stage";
 import { CodeEmpty } from "./code-empty";
 import { CodeChecks } from "./code-checks";
 import { CodeFileViewer } from "./code-file-viewer";
-import { useCodeEditor, useRepairFailedTasks } from "../hooks/use-code-editor";
+import { useCodeEditor, usePublishToGitHub, useRepairFailedTasks } from "../hooks/use-code-editor";
+import { CodePublish } from "./code-publish";
 import type { WorkspaceFile } from "../types";
 
 const FILE_ICON: Record<string, ReactNode> = {
@@ -35,6 +36,7 @@ function EditorSkeleton() {
 export function CodeScreen({ projectId }: { projectId: string }) {
   const editor = useCodeEditor(projectId);
   const repair = useRepairFailedTasks(projectId);
+  const publish = usePublishToGitHub(projectId);
   const [selected, setSelected] = useState<WorkspaceFile | null>(null);
 
   const data = editor.data;
@@ -105,6 +107,18 @@ export function CodeScreen({ projectId }: { projectId: string }) {
             repairInFlight={data.repairInFlight}
             repairing={repair.isPending}
             onRepair={() => repair.mutate()}
+          />
+
+          <CodePublish
+            publishRun={data.publishRun}
+            files={data.files}
+            hasCompletedBuild={data.hasCompletedBuild}
+            publishing={publish.isPending}
+            publishingError={
+              publish.isError ? (publish.error instanceof Error ? publish.error.message : "Publish failed.") : null
+            }
+            target={publish.data?.target ?? null}
+            onPublish={() => publish.mutate()}
           />
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(16rem,22rem)_1fr]">

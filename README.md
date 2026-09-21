@@ -19,7 +19,7 @@ An AI-powered platform that transforms business requirements into production-rea
 - **Styling**: Tailwind CSS v3
 - **UI Components**: Radix UI primitives
 - **Authentication**: NextAuth v5
-- **ORM**: Prisma 6 (PostgreSQL)
+- **ORM**: Prisma 6 (PostgreSQL / Supabase)
 - **Validation**: Zod
 
 ## Getting Started
@@ -41,22 +41,27 @@ npm install
 Create a `.env` file in the root directory:
 
 ```env
-DATABASE_URL="postgresql://user:password@localhost:5432/ai_business_builder"
+# Supabase transaction pooler URI (recommended for Prisma)
+DATABASE_URL="postgresql://postgres.<project-ref>:<db-password>@aws-1-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
 NEXTAUTH_SECRET="your-secret-key"
-NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_URL="https://your-app.vercel.app"
 GOOGLE_CLIENT_ID=""
 GOOGLE_CLIENT_SECRET=""
 GITHUB_ID=""
 GITHUB_SECRET=""
 ```
 
+`DATABASE_URL` is managed centrally in `prisma.config.ts`. Copy the exact URI from Supabase → Project → **Connect** → **Transaction pooler** → **URI**.
+
 ### Database Setup
 
 ```bash
 npm run db:generate
-npm run db:push
+npm run db:deploy   # applies prisma/migrations (baseline + schema)
 npm run db:seed
 ```
+
+Use `npm run db:deploy` (a wrapper for `prisma migrate deploy`) on every environment — it applies committed migrations in order. `db:push` is only for throwaway/draft schema changes.
 
 ### Development
 
@@ -76,8 +81,9 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `npm run lint` | Run ESLint |
 | `npm run typecheck` | Run TypeScript type checking |
 | `npm run db:generate` | Generate Prisma client |
-| `npm run db:push` | Push schema changes to database |
-| `npm run db:migrate` | Run database migrations |
+| `npm run db:push` | Push schema changes to database (draft) |
+| `npm run db:deploy` | Apply committed migrations (`prisma migrate deploy`) |
+| `npm run db:migrate` | Create & apply migrations in dev |
 | `npm run db:seed` | Seed the database |
 | `npm run db:studio` | Open Prisma Studio |
 | `npm run test` | Run tests |

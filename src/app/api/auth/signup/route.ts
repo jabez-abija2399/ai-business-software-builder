@@ -55,10 +55,13 @@ export async function POST(request: NextRequest) {
     });
 
     // Create default organization
+    const slugBase =
+      (name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") ??
+        "") || `org-${user.id}`;
     const org = await prisma.organization.create({
       data: {
         name: `${name}'s Organization`,
-        slug: name?.toLowerCase().replace(/\s+/g, "-") || `org-${user.id.slice(0, 8)}`,
+        slug: `${slugBase}-${user.id.slice(0, 8)}`,
       },
     });
 

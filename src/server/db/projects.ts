@@ -33,7 +33,7 @@ const UUID_RE =
  * plus the most recent agent run and any pending approvals. Keeping this
  * server-side means the client never has to fetch per-project analytics.
  */
-function deriveProjectStatus(input: {
+export function deriveProjectStatus(input: {
   status: string;
   deletedAt: Date | null;
   latestRunStatus?: string;

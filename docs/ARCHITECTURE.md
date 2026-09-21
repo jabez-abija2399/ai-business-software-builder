@@ -233,11 +233,33 @@ A long AI job is never kept inside one HTTP request — it goes through the job 
 AI generation takes minutes → **queue it**.
 
 ```text
-User → API → Create AI Job → Redis/BullMQ → Worker → AI Agents
-   → Verification → Database → UI updates (SSE/WebSocket)
+User → API → Create AI Job → Queue → Worker → AI Agents
+   → Verification → Database → UI updates (polls the real run)
 ```
 
-- **MVP:** SSE for job progress; **later:** WebSockets if polling/SSE is insufficient.
+- **Queue (implemented):** a Postgres-backed queue with optimistic
+  compare-and-swap (`updateMany` CAS flips `QUEUED → RUNNING`); no
+  infrastructure beyond the existing database. `reclaimStaleRuns` /
+  `reclaimStaleDeployments` requeue work whose worker died mid-flight. BullMQ +
+  Redis remains the documented upgrade path if throughput demands it.
+- **Worker (implemented):** `src/server/jobs/worker.ts`, run in its **own
+  process** via `npm run worker` (poll) or `npm run worker:once` (drain a
+  batch). Entry: `src/worker.ts`. It is resilient to transient DB blips (backoff
+  + retry instead of crashing).
+- **AIService:** `src/server/ai` — model router + provider adapters
+  (`deterministic` default; `openai` when `OPENAI_API_KEY` is set). Reasoning
+  tasks (blueprint analysis, design) may use a hosted model; tooling tasks (code
+  generation, quality checks, preview) run deterministically because they are
+  file/analysis work. Every `AgentRun` records real `provider`/`model`
+  provenance.
+- **Workspace:** generated files land in `.fleet-workspace/<projectId>/`
+  (gitignored, never served statically) and are recorded as `ProjectArtifact`
+  rows with checksums. Previews are provisioned as real static HTML and served
+  from `/api/preview/<deploymentId>`.
+- **Honest limitations:** dependency install has no network-enabled sandbox in
+  this environment, so `INSTALL_DEPENDENCIES` fails with `SANDBOX_UNAVAILABLE`;
+  staging/production deployments fail with an explicit "no provider configured"
+  reason. Both are truthful, actionable failures — never fabricated success.
 - Workers run **isolated** from the Next.js server.
 - CPU-risky work (npm install/test/build/lint, git) runs in a **sandbox worker**, never on the main server.
 
@@ -283,8 +305,10 @@ Build in vertical slices; each slice ends in a working, verified feature.
 **Phase 1 — Foundation** (mostly done)
 Foundation → Auth+RBAC → Projects → Blueprint → AI clarification → Blueprint persistence → Verification
 
-**Phase 2 — Generation** (in progress)
-Design generation → App generation → Preview
+**Phase 2 — Generation** (engine implemented)
+Design generation → App generation → Preview: all driven by the worker
+(`src/server/jobs`), which now actually transitions runs and writes artifacts.
+See §7 for the runtime details.
 
 **Phase 3 — Workspace**
 Code workspace → GitHub → Testing → Repair loop
@@ -312,20 +336,25 @@ stage extends the exact same discipline:
   APPROVED blueprint. `build/start` creates the 10 `BUILD_TASK_TYPES` agent runs
   (`CODE_GENERATOR`); `build/editor` returns **only** build-type runs (it never
   aggregates runs from other stages, unlike the deleted `build/status` route).
-  Generated files are persisted as `ProjectArtifact` rows.
+  The worker writes generated files as `ProjectArtifact` rows and runs real
+  local checks (TypeScript parse + deterministic lint logs). The one task this
+  environment cannot do honestly — dependency install — fails with
+  `SANDBOX_UNAVAILABLE` rather than faking it.
 - **Quality** (`/quality`, `quality/editor` GET + `quality/run` POST): requires
   ≥1 COMPLETED build run. `quality/run` creates `TESTS`/`SECURITY`/
-  `ACCESSIBILITY`/`PERFORMANCE` runs; the screen aggregates **real
-  `TestRecord` rows only** — no overall score, coverage percentage, or
-  fabricated Lighthouse `lcp/fid/cls` (deleted `quality/report`).
+  `ACCESSIBILITY`/`PERFORMANCE` runs; the worker evaluates the **real generated
+  files** and writes real `TestRecord` rows — no overall score, coverage
+  percentage, or fabricated Lighthouse `lcp/fid/cls` (deleted `quality/report`).
 - **Preview** (`/preview`, `preview/editor` GET + `preview/create` POST):
   requires ≥1 COMPLETED build run. `preview/create` writes one real
-  `Deployment` row (`environment: "preview"`); `deploymentUrl` stays `null`
-  until provisioning writes one. Never a `*.vercel.app` guess or fake
-  websocket.
+  `Deployment` row (`environment: "preview"`); the worker provisions static HTML
+  to the workspace and sets `deploymentUrl = /api/preview/<id>` once it is
+  READY. `deploymentUrl` stays `null` until provisioning writes one. Never a
+  `*.vercel.app` guess or fake websocket.
 - **Deploy** (`/deploy`, `deploy/editor` GET + `deploy/create` POST): requires
   ≥1 READY preview. `deploy/create` writes real `Deployment` rows for
-  `staging`/`production`, again with honest `deploymentUrl`.
+  `staging`/`production`; the worker fails these honestly when no
+  deployment provider is configured (explicit reason, `deploymentUrl` null).
 
 Run-status vocabulary lives in `src/lib/pipeline.ts` and is shared by the API
 routes and feature modules. Server-side gate/access helpers live in
@@ -347,7 +376,7 @@ src/
 ├── server/
 │   ├── ai/             # AIService, model router, provider adapters
 │   ├── db/             # typed data-access layer
-│   ├── jobs/           # BullMQ worker definitions
+│   ├── jobs/           # Postgres queue, workspace store, handlers, worker loop
 │   └── services/       # EmailService, StorageService, AnalyticsService
 ├── types/
 ├── validations/        # Zod schemas (server + shared)

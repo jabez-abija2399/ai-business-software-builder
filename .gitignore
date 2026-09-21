@@ -6,6 +6,9 @@ node_modules/
 # testing
 coverage/
 
+# worker sandbox (generated project files)
+.fleet-workspace/
+
 # next.js
 .next/
 out/

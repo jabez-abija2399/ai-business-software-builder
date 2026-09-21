@@ -18,7 +18,9 @@
     "db:studio": "prisma studio",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "worker": "node --env-file=.env --import tsx src/worker.ts",
+    "worker:once": "node --env-file=.env --import tsx src/worker.ts --once"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

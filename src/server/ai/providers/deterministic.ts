@@ -698,7 +698,7 @@ function generateCodeDeterministic(input: GenerateCodeInput): CodeGeneration {
           file(
             "tsconfig.json",
             "SOURCE_FILE",
-            `${JSON.stringify({ compilerOptions: { target: "ES2020", jsx: "preserve", strict: true, moduleResolution: "bundler" }, include: ["src"] }, null, 2)}\n`
+            `${JSON.stringify({ compilerOptions: { target: "ES2020", lib: ["ES2020", "DOM", "DOM.Iterable"], jsx: "preserve", strict: true, skipLibCheck: true, moduleResolution: "bundler", module: "esnext", esModuleInterop: true, resolveJsonModule: true }, include: ["src"] }, null, 2)}\n`
           ),
           file(
             "README.md",

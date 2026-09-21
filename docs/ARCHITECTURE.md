@@ -273,10 +273,13 @@ User → API → Create AI Job → Queue → Worker → AI Agents
   (gitignored, never served statically) and are recorded as `ProjectArtifact`
   rows with checksums. Previews are provisioned as real static HTML and served
   from `/api/preview/<deploymentId>`.
-- **Honest limitations:** dependency install has no network-enabled sandbox in
-  this environment, so `INSTALL_DEPENDENCIES` fails with `SANDBOX_UNAVAILABLE`;
-  staging/production deployments fail with an explicit "no provider configured"
-  reason. Both are truthful, actionable failures — never fabricated success.
+- **Honest limitations:** the sandbox is a real, opt-in execution environment.
+  With `FLEET_SANDBOX=local` the worker actually runs `npm install` against the
+  registry, `tsc --noEmit` and `vitest` inside each project workspace and
+  persists their real output as `reports/*.log` artifacts. Without it, installs
+  fail with an explicit `SANDBOX_UNAVAILABLE` reason (never fabricated
+  success). Staging/production deployments still fail with an explicit "no
+  provider configured" reason — both are truthful, actionable failures.
 - Workers run **isolated** from the Next.js server.
 - CPU-risky work (npm install/test/build/lint, git) runs in a **sandbox worker**, never on the main server.
 
@@ -333,9 +336,12 @@ Code workspace (`/code`) → GitHub → Testing → Repair loop
 Implemented: the Code workspace screen reads the **real** generated files from
 the worker's sandbox (latest artifact per path, honest "no longer on disk"
 state when content was purged), the check history per task type, and a **repair
-loop** (`/code/repair`) that re-queues genuinely failed build-task runs
-(`INSTALL_DEPENDENCIES` is exempt — it fails for environmental reasons, not
-code bugs).
+loop** (`/code/repair`) that re-queues genuinely failed build-task runs.
+A **real local sandbox** (`FLEET_SANDBOX=local`) makes `INSTALL_DEPENDENCIES`,
+`RUN_TYPECHECK` and the quality `TESTS` task execute the actual generated
+project (`npm install`, `tsc --noEmit`, `vitest`) and report their genuine
+output; install is exempted from the repair loop because it can fail for
+environmental reasons rather than code bugs.
 
 **Phase 4 — Release** (in progress)
 Deployment → Monitoring → Usage/analytics

@@ -94,7 +94,7 @@ export interface QualityCheckInput {
 export interface QualityCheckResult {
   testType: string;
   name: string;
-  status: "PASSED" | "FAILED";
+  status: "PASSED" | "FAILED" | "SKIPPED";
   durationMs: number;
   errorMessage: string | null;
   commandRef: string | null;

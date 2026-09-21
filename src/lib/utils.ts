@@ -40,6 +40,10 @@ export function truncate(str: string, length: number): string {
   return str.slice(0, length) + "...";
 }
 
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 export function slugify(str: string): string {
   return str
     .toLowerCase()

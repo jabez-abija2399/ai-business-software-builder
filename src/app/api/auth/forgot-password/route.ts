@@ -1,14 +1,18 @@
 import { NextRequest } from "next/server";
 import prisma from "@/lib/prisma";
-import { apiSuccess, apiValidationError, apiNotFound, apiInternalError } from "@/lib/api-response";
-import { z } from "zod";
-
-const forgotPasswordSchema = z.object({
-  email: z.string().email("Invalid email address"),
-});
+import { apiSuccess, apiValidationError, apiInternalError, apiRateLimited } from "@/lib/api-response";
+import { forgotPasswordSchema } from "@/validations/auth";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const limited = rateLimit(`forgot-password:${ip}`, { limit: 5, windowMs: 60_000 });
+
+    if (!limited.success) {
+      return apiRateLimited(limited.retryAfterSeconds);
+    }
+
     const body = await request.json();
     const validationResult = forgotPasswordSchema.safeParse(body);
 
@@ -23,7 +27,9 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return apiNotFound("User");
+      return apiSuccess({
+        message: "If an account exists for this email, a password reset link has been sent.",
+      });
     }
 
     const resetToken = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -38,7 +44,7 @@ export async function POST(request: NextRequest) {
     });
 
     return apiSuccess({
-      message: "Password reset link sent to your email",
+      message: "If an account exists for this email, a password reset link has been sent.",
     });
   } catch (error) {
     console.error("Error processing forgot password:", error);

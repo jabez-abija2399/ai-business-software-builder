@@ -92,6 +92,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Project Structure
 
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full technical architecture, approved package stack, authentication/authorization model, and phased roadmap.
+
 ```
 src/
 ├── app/                    # Next.js App Router pages

@@ -6,21 +6,28 @@ import {
   apiValidationError,
   apiConflict,
   apiInternalError,
+  apiRateLimited,
 } from "@/lib/api-response";
+import { signupSchema } from "@/validations/auth";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const limited = rateLimit(`signup:${ip}`, { limit: 10, windowMs: 60_000 });
+
+    if (!limited.success) {
+      return apiRateLimited(limited.retryAfterSeconds);
+    }
+
     const body = await request.json();
-    const { name, email, password } = body;
+    const validationResult = signupSchema.safeParse(body);
 
-    // Validate input
-    if (!email || !password) {
-      return apiValidationError("Email and password are required");
+    if (!validationResult.success) {
+      return apiValidationError(validationResult.error.flatten());
     }
 
-    if (password.length < 8) {
-      return apiValidationError("Password must be at least 8 characters");
-    }
+    const { name, email, password } = validationResult.data;
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({

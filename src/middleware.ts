@@ -5,10 +5,25 @@ const protectedRoutes = ["/projects", "/settings"];
 const authRoutes = ["/signin", "/signup"];
 const publicApiRoutes = ["/api/auth"];
 
+const sessionCookieNames = [
+  "authjs.session-token",
+  "__Secure-authjs.session-token",
+  "next-auth.session-token",
+  "__Secure-next-auth.session-token",
+];
+
+function readSessionToken(req: NextRequest): string {
+  for (const name of sessionCookieNames) {
+    if (req.cookies.has(name) || req.cookies.has(`${name}.0`)) {
+      return req.cookies.get(name)?.value || req.cookies.get(`${name}.0`)?.value || "";
+    }
+  }
+  return "";
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const sessionToken = req.cookies.get("next-auth.session-token")?.value
-    || req.cookies.get("__Secure-next-auth.session-token")?.value;
+  const sessionToken = readSessionToken(req);
 
   const isAuthenticated = !!sessionToken;
 

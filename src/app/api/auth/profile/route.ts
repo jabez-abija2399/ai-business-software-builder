@@ -9,10 +9,13 @@ const updateProfileSchema = z.object({
     .string()
     .min(1, "Name is required")
     .max(100, "Name must be at most 100 characters")
+    .trim()
     .optional(),
   email: z
     .string()
+    .trim()
     .email("Invalid email address")
+    .toLowerCase()
     .optional(),
 });
 

@@ -87,14 +87,14 @@ This document is the technical reference for the platform. It defines the approv
 | Icons | `lucide-react` | ✅ | |
 | UI primitives | Radix UI (`@radix-ui/*`) | ✅ | shadcn/ui-style components in `src/components/ui` |
 | Class management | `class-variance-authority`, `clsx`, `tailwind-merge` | ✅ | `cn()` helper in `src/lib/utils.ts` |
-| Forms | `react-hook-form` + `@hookform/resolvers` | ⏳ planned | Use for builder/project forms |
+| Forms | `react-hook-form` + `@hookform/resolvers` | ✅ | Create-project modal (zodResolver) |
 | Validation | `zod` | ✅ | Strictly server-side too |
 | ORM | Prisma | ✅ | + `prisma.config.ts` |
 | Database | PostgreSQL | ✅ | Hosted on **Supabase** (transaction pooler, `prisma/migrations`) |
 | Authentication | **NextAuth (Auth.js) v5** | ✅ | Credentials + optional Google/GitHub. **Not** Better Auth. |
 | RBAC | Custom, Prisma-backed | ✅ | `Organization → Membership → Role → Permissions` |
 | Client state | `zustand` | ⏳ planned | Only when needed |
-| Server state | `@tanstack/react-query` | ⏳ planned | Only when needed |
+| Server state | `@tanstack/react-query` | ✅ | Cursor-paginated `useInfiniteQuery`, SSR prefetch + `HydrationBoundary`, optimistic remove |
 | API | Next.js Route Handlers + Zod + typed service layer | ✅ | `src/server/*`, `src/validations/*` |
 | AI SDK | `ai` + `@ai-sdk/react` | ⏳ planned | Behind `AIService` abstraction |
 | AI providers | `@ai-sdk/openai`, then adapters | ⏳ planned | Enabled one at a time via env config |

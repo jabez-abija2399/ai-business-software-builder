@@ -124,6 +124,7 @@ model Project {
   name           String
   description    String?
   mode           String   @default("BUSINESS")
+  environment    String   @default("DEVELOPMENT")
   status         String   @default("ACTIVE")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -152,6 +153,7 @@ model Project {
   @@index([organizationId])
   @@index([ownerId])
   @@index([status])
+  @@index([environment])
   @@index([createdAt])
   @@index([deletedAt])
   @@map("projects")

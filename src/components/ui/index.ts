@@ -50,6 +50,24 @@ export {
 
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./tabs";
 
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuGroup,
+  DropdownMenuPortal,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuRadioGroup,
+} from "./dropdown-menu";
+
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "./tooltip";
 
 export { Alert, AlertTitle, AlertDescription } from "./alert";

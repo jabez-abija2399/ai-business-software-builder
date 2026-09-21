@@ -1,7 +1,11 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { createProject, listProjects } from "@/server/db/projects";
-import { createProjectSchema } from "@/validations/project";
+import { getPrimaryOrganizationId } from "@/server/db/organizations";
+import {
+  createProjectSchema,
+  listProjectsQuerySchema,
+} from "@/validations/project";
 import {
   apiSuccess,
   apiCreated,
@@ -18,27 +22,24 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get("status") || undefined;
-    const limit = parseInt(searchParams.get("limit") || "20");
-    const cursor = searchParams.get("cursor") || undefined;
+    const parsed = listProjectsQuerySchema.safeParse({
+      search: searchParams.get("search") ?? undefined,
+      filter: searchParams.get("filter") ?? undefined,
+      sort: searchParams.get("sort") ?? undefined,
+      limit: searchParams.get("limit") ?? undefined,
+      cursor: searchParams.get("cursor") ?? undefined,
+    });
 
-    // Get user's organization
-    const user = await import("@/lib/prisma").then((m) =>
-      m.default.organizationMember.findFirst({
-        where: { userId: session.user.id },
-        select: { organizationId: true },
-      })
-    );
-
-    if (!user) {
-      return apiSuccess({ projects: [], nextCursor: null });
+    if (!parsed.success) {
+      return apiValidationError(parsed.error.flatten());
     }
 
-    const result = await listProjects(user.organizationId, {
-      status,
-      limit,
-      cursor,
-    });
+    const organizationId = await getPrimaryOrganizationId(session.user.id);
+    if (!organizationId) {
+      return apiSuccess({ projects: [], nextCursor: null, total: 0 });
+    }
+
+    const result = await listProjects(organizationId, parsed.data);
 
     return apiSuccess(result);
   } catch (error) {
@@ -61,20 +62,13 @@ export async function POST(request: NextRequest) {
       return apiValidationError(validationResult.error.flatten());
     }
 
-    // Get user's organization
-    const user = await import("@/lib/prisma").then((m) =>
-      m.default.organizationMember.findFirst({
-        where: { userId: session.user.id },
-        select: { organizationId: true },
-      })
-    );
-
-    if (!user) {
+    const organizationId = await getPrimaryOrganizationId(session.user.id);
+    if (!organizationId) {
       return apiInternalError("No organization found");
     }
 
     const project = await createProject({
-      organizationId: user.organizationId,
+      organizationId,
       ownerId: session.user.id,
       ...validationResult.data,
     });

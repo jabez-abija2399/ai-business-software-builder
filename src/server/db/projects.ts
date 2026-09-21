@@ -1,5 +1,12 @@
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import type { ProjectWhereInput, ProjectUpdateInput } from "@/types/prisma";
+import type {
+  ListProjectsParams,
+  ProjectEnvironment,
+  ProjectListItem,
+  ProjectListResponse,
+  ProjectStatus,
+} from "@/features/projects/types";
 
 export interface CreateProjectInput {
   organizationId: string;
@@ -7,13 +14,95 @@ export interface CreateProjectInput {
   name: string;
   description?: string;
   mode?: string;
+  environment?: ProjectEnvironment;
 }
 
 export interface UpdateProjectInput {
   name?: string;
   description?: string;
   mode?: string;
+  environment?: ProjectEnvironment;
   status?: string;
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Derives a single, semantic status for a project from its persistence state
+ * plus the most recent agent run and any pending approvals. Keeping this
+ * server-side means the client never has to fetch per-project analytics.
+ */
+function deriveProjectStatus(input: {
+  status: string;
+  deletedAt: Date | null;
+  latestRunStatus?: string;
+  hasPendingApproval: boolean;
+}): ProjectStatus {
+  if (input.status === "ARCHIVED" || input.deletedAt) {
+    return "ARCHIVED";
+  }
+  if (input.latestRunStatus === "FAILED" || input.latestRunStatus === "ERROR") {
+    return "ERROR";
+  }
+  if (input.hasPendingApproval) {
+    return "ATTENTION";
+  }
+  if (
+    input.latestRunStatus === "RUNNING" ||
+    input.latestRunStatus === "QUEUED"
+  ) {
+    return "BUILDING";
+  }
+  return "ACTIVE";
+}
+
+function buildProjectWhere(
+  organizationId: string,
+  params: ListProjectsParams
+): Prisma.ProjectWhereInput {
+  const where: Prisma.ProjectWhereInput = {
+    organizationId,
+  };
+
+  const filter = params.filter ?? "all";
+  if (filter === "archived") {
+    where.status = "ARCHIVED";
+  } else {
+    where.deletedAt = null;
+    where.status = { not: "ARCHIVED" };
+    if (filter === "production") where.environment = "PRODUCTION";
+    if (filter === "staging") where.environment = "STAGING";
+    if (filter === "development") where.environment = "DEVELOPMENT";
+  }
+
+  const search = params.search?.trim();
+  if (search) {
+    const terms: Prisma.ProjectWhereInput[] = [
+      { name: { contains: search, mode: "insensitive" } },
+      { description: { contains: search, mode: "insensitive" } },
+    ];
+    if (UUID_RE.test(search)) {
+      terms.push({ id: search });
+    }
+    where.AND = [{ OR: terms }];
+  }
+
+  return where;
+}
+
+function orderByFor(
+  sort: ListProjectsParams["sort"]
+): Prisma.ProjectOrderByWithRelationInput[] {
+  switch (sort) {
+    case "name":
+      return [{ name: "asc" }, { id: "asc" }];
+    case "created":
+      return [{ createdAt: "desc" }, { id: "desc" }];
+    case "updated":
+    default:
+      return [{ updatedAt: "desc" }, { id: "desc" }];
+  }
 }
 
 export async function createProject(input: CreateProjectInput) {
@@ -24,6 +113,7 @@ export async function createProject(input: CreateProjectInput) {
       name: input.name,
       description: input.description,
       mode: input.mode || "BUSINESS",
+      environment: input.environment || "DEVELOPMENT",
     },
   });
 }
@@ -50,47 +140,72 @@ export async function getProject(projectId: string) {
 
 export async function listProjects(
   organizationId: string,
-  options?: {
-    status?: string;
-    limit?: number;
-    cursor?: string;
-  }
-) {
-  const limit = options?.limit || 20;
-  const where: ProjectWhereInput = {
-    organizationId,
-    deletedAt: null,
-  };
+  params: ListProjectsParams = {}
+): Promise<ProjectListResponse> {
+  const limit = params.limit ?? 20;
+  const where = buildProjectWhere(organizationId, params);
 
-  if (options?.status) {
-    where.status = options.status;
-  }
-
-  const projects = await prisma.project.findMany({
-    where,
-    take: limit + 1,
-    cursor: options?.cursor ? { id: options.cursor } : undefined,
-    orderBy: { createdAt: "desc" },
-    include: {
-      _count: {
-        select: {
-          requirements: true,
-          features: true,
+  const [rows, total] = await Promise.all([
+    prisma.project.findMany({
+      where,
+      take: limit + 1,
+      cursor: params.cursor ? { id: params.cursor } : undefined,
+      skip: params.cursor ? 1 : 0,
+      orderBy: orderByFor(params.sort),
+      include: {
+        _count: {
+          select: {
+            agentRuns: true,
+            requirements: true,
+            features: true,
+          },
+        },
+        agentRuns: {
+          take: 1,
+          orderBy: { createdAt: "desc" },
+          select: { status: true },
+        },
+        approvals: {
+          where: { status: "PENDING" },
+          take: 1,
+          select: { id: true },
         },
       },
-    },
-  });
+    }),
+    prisma.project.count({ where }),
+  ]);
 
-  let nextCursor: string | undefined;
-  if (projects.length > limit) {
-    const nextItem = projects.pop();
-    nextCursor = nextItem?.id;
+  let nextCursor: string | null = null;
+  if (rows.length > limit) {
+    // Keep the limit rows we'll actually return; the cursor is the id of the
+    // last returned row so the next page resumes right after it (no overlap,
+    // no missed rows) given the id is the final tiebreaker in every sort.
+    nextCursor = rows[limit - 1].id;
+    rows.length = limit;
   }
 
-  return {
-    projects,
-    nextCursor,
-  };
+  const projects: ProjectListItem[] = rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    environment: row.environment as ProjectEnvironment,
+    mode: row.mode,
+    status: deriveProjectStatus({
+      status: row.status,
+      deletedAt: row.deletedAt,
+      latestRunStatus: row.agentRuns[0]?.status,
+      hasPendingApproval: row.approvals.length > 0,
+    }),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    counts: {
+      agentRuns: row._count.agentRuns,
+      requirements: row._count.requirements,
+      features: row._count.features,
+    },
+  }));
+
+  return { projects, nextCursor, total };
 }
 
 export async function updateProject(projectId: string, input: UpdateProjectInput) {

@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
+import { toast } from "@/components/ui/use-toast";
 
 const signupSchema = z
   .object({
@@ -72,6 +73,12 @@ export default function SignUpPage() {
       });
 
       if (response.ok) {
+        toast({
+          variant: "success",
+          title: "Account created successfully",
+          description: `Welcome aboard, ${formData.name}! You are now signed in.`,
+        });
+
         const result = await signIn("credentials", {
           email: formData.email,
           password: formData.password,
@@ -79,16 +86,40 @@ export default function SignUpPage() {
         });
 
         if (result?.error) {
-          setApiError("Account created but sign in failed. Please try signing in.");
-        } else {
-          router.push("/projects");
-          router.refresh();
+          const retry = await signIn("credentials", {
+            email: formData.email,
+            password: formData.password,
+            redirect: false,
+          });
+
+          if (retry?.error) {
+            toast({
+              variant: "destructive",
+              title: "Sign in failed",
+              description: "Your account was created. Please sign in manually.",
+            });
+            router.push("/signin");
+            return;
+          }
         }
+
+        router.push("/projects");
+        router.refresh();
       } else {
         const data = await response.json();
+        toast({
+          variant: "destructive",
+          title: "Failed to create account",
+          description: data.error?.message || "An unexpected error occurred.",
+        });
         setApiError(data.error?.message || "Failed to create account");
       }
     } catch {
+      toast({
+        variant: "destructive",
+        title: "Something went wrong",
+        description: "An unexpected error occurred. Please try again.",
+      });
       setApiError("An error occurred. Please try again.");
     } finally {
       setLoading(false);

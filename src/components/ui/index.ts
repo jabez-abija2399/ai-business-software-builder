@@ -57,3 +57,15 @@ export { Alert, AlertTitle, AlertDescription } from "./alert";
 export { Skeleton } from "./skeleton";
 
 export { Avatar, AvatarImage, AvatarFallback } from "./avatar";
+
+export {
+  ToastProvider,
+  ToastViewport,
+  Toast,
+  ToastTitle,
+  ToastDescription,
+  ToastClose,
+  ToastAction,
+} from "./toast";
+export { Toaster } from "./toaster";
+export { useToast, toast } from "./use-toast";

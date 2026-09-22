@@ -28,6 +28,7 @@ export type AnalyticsEventName =
   | "design_generated"
   | "build_started"
   | "quality_run_started"
+  | "review_run_started"
   | "preview_created"
   | "deploy_created"
   | "run_finished";

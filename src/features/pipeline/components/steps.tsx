@@ -6,6 +6,7 @@ export const PIPELINE_STEPS = [
   { id: "design", label: "Design" },
   { id: "build", label: "Build" },
   { id: "quality", label: "Quality" },
+  { id: "review", label: "Review" },
   { id: "preview", label: "Preview" },
   { id: "deploy", label: "Deploy" },
 ] as const;

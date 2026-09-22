@@ -381,7 +381,17 @@ and shows all-time counts, a 14-day activity breakdown, runs per stage with
 real durations, status/environment breakdowns and the most active projects. No
 vendor or instrumentation is required for the dashboard to be correct.
 
-**Phase 5 — Advanced**
+Implemented (Advanced agents — Review stage): two worker agents that run against
+the **real generated files**. `GENERATE_README` writes a genuine `README.md`
+detailing what was actually generated (real file tree, real dependencies parsed
+from the generated `package.json`, real component and route names); `AGENT_REVIEW`
+scans the files for real findings (TODO/FIXME markers, empty files, placeholder
+content, missing `package.json`, plus genuine build-failure context from the
+build runs). Both persist real `ProjectArtifact` rows and the Review screen
+(`/projects/<id>/review`, between Quality and Preview) renders only those rows.
+Review stages never invent content, counts, or issues.
+
+**Phase 5 — Advanced** (advanced agents implemented; workflow engine, integrations, business AI next)
 Advanced agents → Workflow engine → Integrations → Business AI (email, payments, etc.)
 
 ### Current honest-state contract (post-blueprint pipeline)

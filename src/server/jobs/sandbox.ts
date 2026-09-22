@@ -54,6 +54,7 @@ export function runWorkspaceCommand(
     const child = spawn(command, args, {
       cwd: projectDir(projectId),
       shell: false,
+      detached: true,
       env: {
         ...process.env,
         NEXT_TELEMETRY_DISABLED: "1",
@@ -74,12 +75,48 @@ export function runWorkspaceCommand(
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      if (child.pid) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          child.kill("SIGKILL");
+        }
+      } else {
+        child.kill("SIGKILL");
+      }
     }, timeoutMs);
 
-    child.on("error", (error) => {
+    const finish = (result: CommandResult) => {
       clearTimeout(timer);
-      resolve({
+      resolve(result);
+    };
+
+    let settled = false;
+    const watchdog = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      if (child.pid) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }
+      finish({
+        ok: false,
+        timedOut,
+        code: null,
+        stdout,
+        stderr: `${stderr}\n${timedOut ? "timed out" : "command stalled"} and was force-killed.`.trim(),
+        durationMs: Date.now() - startedAt,
+      });
+    }, timeoutMs + 15_000);
+
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      finish({
         ok: false,
         timedOut,
         code: null,
@@ -89,8 +126,10 @@ export function runWorkspaceCommand(
       });
     });
     child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      finish({
         ok: !timedOut && code === 0,
         timedOut,
         code,

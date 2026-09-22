@@ -30,9 +30,13 @@ export const QUALITY_TASK_TYPES: string[] = [
   "PERFORMANCE",
 ];
 
+/** Post-build review agents: real docs + honest agent review of generated files. */
+export const REVIEW_TASK_TYPES: string[] = ["GENERATE_README", "AGENT_REVIEW"];
+
 export const DESIGN_AGENT_TYPE = "DESIGN_AGENT" as const;
 export const BUILD_AGENT_TYPE = "CODE_GENERATOR" as const;
 export const QUALITY_AGENT_TYPE = "QUALITY_CHECK" as const;
+export const REVIEW_AGENT_TYPE = "AGENT_REVIEW" as const;
 
 export const GITHUB_PUBLISH_TASK_TYPE = "GITHUB_PUBLISH" as const;
 export const GIT_AGENT_TYPE = "GIT_PUBLISHER" as const;
@@ -47,6 +51,7 @@ export const PIPELINE_TASK_TYPES: string[] = [
   ...DESIGN_TASK_TYPES,
   ...BUILD_TASK_TYPES,
   ...QUALITY_TASK_TYPES,
+  ...REVIEW_TASK_TYPES,
   GITHUB_PUBLISH_TASK_TYPE,
 ];
 

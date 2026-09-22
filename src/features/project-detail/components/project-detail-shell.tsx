@@ -43,6 +43,7 @@ const NAV_ITEMS = [
   { name: "Code", href: "/code", end: false },
   { name: "Preview", href: "/preview", end: false },
   { name: "Deploy", href: "/deploy", end: false },
+  { name: "Health", href: "/health", end: false },
 ] as const;
 
 function CopyProjectId({ projectId }: { projectId: string }) {

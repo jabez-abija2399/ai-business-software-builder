@@ -65,11 +65,12 @@ function serializeDeployment(d: {
  * deployment advances to READY/FAILED only when Vercel actually reports that,
  * so the screen never claims readiness it hasn't verified.
  */
-async function reconcileVercelDeployments(
+export async function reconcileVercelDeployments(
   deployments: Array<{
     id: string;
     status: string;
     completedAt: Date | null;
+    deploymentUrl: string | null;
     metadataJson: unknown;
   }>
 ): Promise<void> {
@@ -91,6 +92,7 @@ async function reconcileVercelDeployments(
       if (remote.readyState === "READY") {
         await settleDeployment(deployment.id, {
           status: "READY",
+          deploymentUrl: deployment.deploymentUrl,
           completedAt: new Date(),
           metadataJson: { ...metadata, vercelStatus: "READY" },
         });
@@ -100,6 +102,7 @@ async function reconcileVercelDeployments(
         const completedAt = new Date();
         await settleDeployment(deployment.id, {
           status: "FAILED",
+          deploymentUrl: deployment.deploymentUrl,
           completedAt,
           metadataJson: {
             ...metadata,

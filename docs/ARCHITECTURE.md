@@ -349,7 +349,7 @@ to a repository via the Git Data API and records the real repo URL + commit
 sha. Install is exempted from the repair loop because it can fail for
 environmental reasons rather than code bugs.
 
-**Phase 4 — Release** (real Vercel deploys implemented; monitoring + analytics next)
+**Phase 4 — Release** (real Vercel deploys implemented; monitoring implemented; usage/analytics next)
 Deployment → Monitoring → Usage/analytics
 
 Implemented: with `VERCEL_TOKEN` configured, the Deploy stage (`/deploy`)
@@ -360,6 +360,16 @@ until Vercel reports READY, which the editor route verifies against the
 provider on every poll and only then marks the environment ready. Without the
 token, deploys fail with an explicit, actionable "set VERCEL_TOKEN" reason and
 never fabricate a URL.
+
+Implemented (Monitoring): health checks are honest HTTP probes — the worker
+re-fetches READY deployment URLs in a background loop (`DEPLOYMENT.healthStatus`
+/ `healthCheckedAt` / `metadataJson.health`), and the Health screen
+(`/projects/<id>/health`) can trigger one immediately with "Check now". The
+platform Monitoring page (`/monitoring`) aggregates only real rows: run/deploy
+counts by genuine status, failures in the last 24h, uptime from live probes,
+recent runs with real durations + error reasons, deploy history, and the audit
+feed. `APP_URL` (default `http://localhost:3000`) is the origin used to probe
+relative preview URLs; nothing is reported as up without a 2xx–3xx response.
 
 **Phase 5 — Advanced**
 Advanced agents → Workflow engine → Integrations → Business AI (email, payments, etc.)

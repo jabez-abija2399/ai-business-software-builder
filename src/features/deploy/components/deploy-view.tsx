@@ -3,6 +3,7 @@
 import { ExternalLink, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DeploymentStatusBadge } from "../../pipeline/components/deployment-status";
+import { StatusChip } from "../../monitoring/components/status-chip";
 import { formatUpdatedAgo } from "../../project-detail/lib/format";
 import type { DeployDeployment, DeployEditorData } from "../types";
 import { FAILED_DEPLOYMENT, IN_FLIGHT_DEPLOYMENT, READY_DEPLOYMENT } from "../types";
@@ -31,7 +32,10 @@ function Environment({
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-[15px] font-semibold tracking-tight capitalize">{environment}</h3>
         {latest ? (
-          <DeploymentStatusBadge status={latest.status} />
+          <div className="flex items-center gap-1.5">
+            {latest.healthStatus && <StatusChip value={latest.healthStatus} />}
+            <DeploymentStatusBadge status={latest.status} />
+          </div>
         ) : (
           <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
             No deployment yet

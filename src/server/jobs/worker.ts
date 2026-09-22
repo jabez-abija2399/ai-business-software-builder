@@ -19,6 +19,7 @@ import {
   type ClaimedRun,
 } from "./queue";
 import { handleDeployment } from "./handlers/deploy";
+import { runStaleHealthChecks } from "@/server/monitoring/healthchecks";
 
 export interface WorkerOptions {
   /** Drain the queue and exit instead of polling forever. */
@@ -27,6 +28,7 @@ export interface WorkerOptions {
 }
 
 const RECLAIM_INTERVAL_MS = 60_000;
+const HEALTH_LOOP_INTERVAL_MS = 30_000;
 
 function log(message: string): void {
   console.log(`[worker ${new Date().toISOString()}] ${message}`);
@@ -89,6 +91,23 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Background loop that re-probes READY deployments. Runs alongside the queue
+ * drain so a slow/failed HTTP probe never delays generation work. The queue
+ * drain (`processOne`) is unaffected.
+ */
+async function healthCheckLoop(running: () => boolean): Promise<void> {
+  while (running()) {
+    try {
+      await runStaleHealthChecks();
+    } catch (error) {
+      const message = error instanceof Error ? error.message.split("\n")[0] : String(error);
+      log(`health check issue: ${message}`);
+    }
+    await sleep(HEALTH_LOOP_INTERVAL_MS);
+  }
+}
+
 export async function runWorker(options: WorkerOptions = {}): Promise<void> {
   const once = options.once ?? false;
   const pollIntervalMs = options.pollIntervalMs ?? 2000;
@@ -106,6 +125,10 @@ export async function runWorker(options: WorkerOptions = {}): Promise<void> {
   };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
+
+  // Health checks only make sense for a long-lived worker; --once just drains
+  // the queue (the Health screen can trigger checks on demand).
+  const healthLoopPromise = once ? Promise.resolve() : healthCheckLoop(() => running);
 
   let lastReclaim = 0;
   let consecutiveErrors = 0;
@@ -139,5 +162,6 @@ export async function runWorker(options: WorkerOptions = {}): Promise<void> {
     }
   }
 
+  if (!once) await healthLoopPromise;
   log("stopped");
 }

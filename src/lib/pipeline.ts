@@ -39,6 +39,17 @@ export const GIT_AGENT_TYPE = "GIT_PUBLISHER" as const;
 
 export const QUALITY_TEST_TYPES: string[] = QUALITY_TASK_TYPES;
 
+export const BLUEPRINT_TASK_TYPE = "BLUEPRINT_ANALYSIS" as const;
+
+/** Every pipeline stage that can have its own AgentRun (for Health views). */
+export const PIPELINE_TASK_TYPES: string[] = [
+  BLUEPRINT_TASK_TYPE,
+  ...DESIGN_TASK_TYPES,
+  ...BUILD_TASK_TYPES,
+  ...QUALITY_TASK_TYPES,
+  GITHUB_PUBLISH_TASK_TYPE,
+];
+
 /** AgentRun statuses that mean "still working" — poll while these are real. */
 export const IN_FLIGHT_RUN_STATUSES: string[] = ["QUEUED", "RUNNING", "IN_PROGRESS"];
 /** AgentRun statuses that mean "stopped with a problem". */

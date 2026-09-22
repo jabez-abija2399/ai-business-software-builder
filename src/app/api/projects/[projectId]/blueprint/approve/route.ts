@@ -44,6 +44,17 @@ export async function POST(
     }
 
     const approved = await approveBlueprint(blueprint.id, session.user.id);
+
+    try {
+      const { trackAnalytics } = await import("@/server/analytics/service");
+      trackAnalytics("blueprint_approved", {
+        distinctId: session.user.id,
+        properties: { projectId, blueprintId: blueprint.id, version: blueprint.version },
+      });
+    } catch {
+      // Events must never break the response.
+    }
+
     return apiSuccess(approved);
   } catch (error) {
     console.error("Error approving blueprint:", error);

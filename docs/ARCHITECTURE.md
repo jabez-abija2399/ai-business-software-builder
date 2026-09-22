@@ -349,7 +349,7 @@ to a repository via the Git Data API and records the real repo URL + commit
 sha. Install is exempted from the repair loop because it can fail for
 environmental reasons rather than code bugs.
 
-**Phase 4 — Release** (real Vercel deploys implemented; monitoring implemented; usage/analytics next)
+**Phase 4 — Release** (real Vercel deploys implemented; monitoring implemented; usage/analytics implemented)
 Deployment → Monitoring → Usage/analytics
 
 Implemented: with `VERCEL_TOKEN` configured, the Deploy stage (`/deploy`)
@@ -370,6 +370,16 @@ counts by genuine status, failures in the last 24h, uptime from live probes,
 recent runs with real durations + error reasons, deploy history, and the audit
 feed. `APP_URL` (default `http://localhost:3000`) is the origin used to probe
 relative preview URLs; nothing is reported as up without a 2xx–3xx response.
+
+Implemented (Usage/analytics): product analytics is a small service interface
+(`src/server/analytics/service.ts`). With `POSTHOG_API_KEY` set, server-side
+events (sign-ins, project creation, each pipeline stage action, run finishes)
+are captured; without it the service is an honest no-op that never blocks a
+request. The `/usage` dashboard is entirely **first-party**: it reads real
+`AgentRun` / `Deployment` / `Project` rows within the user's accessible scope
+and shows all-time counts, a 14-day activity breakdown, runs per stage with
+real durations, status/environment breakdowns and the most active projects. No
+vendor or instrumentation is required for the dashboard to be correct.
 
 **Phase 5 — Advanced**
 Advanced agents → Workflow engine → Integrations → Business AI (email, payments, etc.)

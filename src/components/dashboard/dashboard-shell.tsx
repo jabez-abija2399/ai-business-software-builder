@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   Activity,
+  BarChart3,
   FolderKanban,
   LogOut,
   Menu,
@@ -19,6 +20,7 @@ import { ThemeToggle } from "./theme-toggle";
 const NAV_ITEMS = [
   { name: "Projects", href: "/projects", icon: FolderKanban },
   { name: "Monitoring", href: "/monitoring", icon: Activity },
+  { name: "Usage", href: "/usage", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },
 ] as const;
 

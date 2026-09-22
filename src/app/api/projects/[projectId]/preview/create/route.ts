@@ -77,6 +77,16 @@ export async function POST(
       select: { id: true },
     });
 
+    try {
+      const { trackAnalytics } = await import("@/server/analytics/service");
+      trackAnalytics("preview_created", {
+        distinctId: session.user.id,
+        properties: { projectId, deploymentId: deployment.id },
+      });
+    } catch {
+      // Events must never break the response.
+    }
+
     return apiAccepted({
       status: "queued",
       deploymentId: deployment.id,

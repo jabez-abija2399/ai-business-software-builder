@@ -76,12 +76,21 @@ export interface CompleteRunPatch {
   tokenUsage?: Prisma.InputJsonValue;
 }
 
-export async function completeRun(id: string, patch: CompleteRunPatch = {}): Promise<void> {
-  await prisma.agentRun.update({
+export interface CompletedRun {
+  startedAt: Date | null;
+  completedAt: Date;
+}
+
+export async function completeRun(
+  id: string,
+  patch: CompleteRunPatch = {}
+): Promise<CompletedRun> {
+  const completedAt = new Date();
+  const updated = await prisma.agentRun.update({
     where: { id },
     data: {
       status: "COMPLETED",
-      completedAt: new Date(),
+      completedAt,
       errorCode: null,
       errorMessage: null,
       outputArtifactIdsJson: patch.outputArtifactIdsJson
@@ -91,7 +100,9 @@ export async function completeRun(id: string, patch: CompleteRunPatch = {}): Pro
       model: patch.model,
       tokenUsage: patch.tokenUsage,
     },
+    select: { startedAt: true },
   });
+  return { startedAt: updated.startedAt, completedAt };
 }
 
 export async function failRun(

@@ -14,7 +14,7 @@ import type { StageEditorProject } from "@/features/pipeline/types";
 
 const FAILED_STATUSES = ["FAILED", "ERROR", "CANCELLED"];
 
-async function accessibleProjectIds(userId: string): Promise<string[]> {
+export async function accessibleProjectIds(userId: string): Promise<string[]> {
   const memberships = await prisma.organizationMember.findMany({
     where: { userId },
     select: { organizationId: true },

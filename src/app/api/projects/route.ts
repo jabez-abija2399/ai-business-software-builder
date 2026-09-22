@@ -73,6 +73,16 @@ export async function POST(request: NextRequest) {
       ...validationResult.data,
     });
 
+    try {
+      const { trackAnalytics } = await import("@/server/analytics/service");
+      trackAnalytics("project_created", {
+        distinctId: session.user.id,
+        properties: { projectId: project.id, name: project.name },
+      });
+    } catch {
+      // Events must never break the response.
+    }
+
     return apiCreated(project);
   } catch (error) {
     console.error("Error creating project:", error);

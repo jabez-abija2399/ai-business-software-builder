@@ -85,8 +85,23 @@ export async function POST(
         status: "PENDING",
         deploymentUrl: null,
       },
-      select: { id: true },
+      select: { id: true, provider: true },
     });
+
+    try {
+      const { trackAnalytics } = await import("@/server/analytics/service");
+      trackAnalytics("deploy_created", {
+        distinctId: session.user.id,
+        properties: {
+          projectId,
+          deploymentId: deployment.id,
+          environment,
+          provider: deployment.provider,
+        },
+      });
+    } catch {
+      // Events must never break the response.
+    }
 
     return apiAccepted({
       status: "queued",

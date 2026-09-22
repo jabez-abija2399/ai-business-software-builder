@@ -68,6 +68,20 @@ if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers,
+  events: {
+    async signIn({ user, account }) {
+      if (!user?.id) return;
+      try {
+        const { trackAnalytics } = await import("@/server/analytics/service");
+        trackAnalytics("sign_in", {
+          distinctId: user.id,
+          properties: { method: account?.provider ?? "credentials" },
+        });
+      } catch {
+        // Events must never break sign-in.
+      }
+    },
+  },
   callbacks: {
     async session({ session, token }) {
       if (session.user) {

@@ -20,6 +20,7 @@ import {
 } from "./queue";
 import { handleDeployment } from "./handlers/deploy";
 import { runStaleHealthChecks } from "@/server/monitoring/healthchecks";
+import { trackAnalytics } from "@/server/analytics/service";
 
 export interface WorkerOptions {
   /** Drain the queue and exit instead of polling forever. */
@@ -40,20 +41,56 @@ function describe(error: unknown): { code: string; message: string } {
   return { code: "UNKNOWN_ERROR", message: String(error) };
 }
 
+function trackRunFinished(
+  run: ClaimedRun,
+  outcome: { status: "COMPLETED" | "FAILED"; provider?: string | null; model?: string | null; durationMs: number | null; error?: { code: string; message: string } | null }
+): void {
+  try {
+    trackAnalytics("run_finished", {
+      distinctId: run.userId,
+      properties: {
+        projectId: run.projectId,
+        runId: run.id,
+        taskType: run.taskType,
+        agentType: run.agentType,
+        status: outcome.status,
+        provider: outcome.provider ?? null,
+        model: outcome.model ?? null,
+        durationMs: outcome.durationMs,
+        errorCode: outcome.error?.code ?? null,
+      },
+    });
+  } catch {
+    // Analytics must never affect worker progress.
+  }
+}
+
 async function processRun(run: ClaimedRun): Promise<void> {
   try {
     const outcome = await executeRun(run);
-    await completeRun(run.id, {
+    const { startedAt, completedAt } = await completeRun(run.id, {
       outputArtifactIdsJson: outcome.outputArtifactIds,
       provider: outcome.provider?.name,
       model: outcome.provider?.model,
       tokenUsage: outcome.tokenUsage,
     });
     log(`run ${run.id} [${run.taskType}] COMPLETED — ${outcome.message ?? "done"}`);
+    trackRunFinished(run, {
+      status: "COMPLETED",
+      provider: outcome.provider?.name,
+      model: outcome.provider?.model,
+      durationMs:
+        startedAt != null ? Math.max(0, completedAt.getTime() - startedAt.getTime()) : null,
+    });
   } catch (error) {
     const { code, message } = describe(error);
     await failRun(run.id, code, message);
     log(`run ${run.id} [${run.taskType}] FAILED (${code}) — ${message}`);
+    trackRunFinished(run, {
+      status: "FAILED",
+      durationMs: null,
+      error: { code, message },
+    });
   }
 }
 

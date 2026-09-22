@@ -79,6 +79,16 @@ export async function POST(
       })),
     });
 
+    try {
+      const { trackAnalytics } = await import("@/server/analytics/service");
+      trackAnalytics("quality_run_started", {
+        distinctId: session.user.id,
+        properties: { projectId, taskCount: result.count },
+      });
+    } catch {
+      // Events must never break the response.
+    }
+
     return apiAccepted({
       status: "queued",
       tasksCreated: result.count,

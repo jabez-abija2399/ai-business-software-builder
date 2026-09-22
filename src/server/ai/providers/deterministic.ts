@@ -617,7 +617,13 @@ function packageJson(projectName: string): string {
       private: true,
       scripts: { dev: "next dev", build: "next build", start: "next start", test: "vitest" },
       dependencies: { next: "^15.0.0", react: "^19.0.0", "react-dom": "^19.0.0" },
-      devDependencies: { typescript: "^5.5.0", vitest: "^2.0.0" },
+      devDependencies: {
+        typescript: "^5.5.0",
+        vitest: "^2.0.0",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "@types/node": "^20.0.0",
+      },
     },
     null,
     2

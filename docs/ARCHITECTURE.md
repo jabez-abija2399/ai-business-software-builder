@@ -281,8 +281,10 @@ User → API → Create AI Job → Queue → Worker → AI Agents
   success). GitHub publishing is real when `GITHUB_TOKEN` is set — the worker
   pushes via the Git Data API and records the real repo URL + commit sha;
   otherwise the publish endpoint 409s with an explicit "not configured" reason.
-  Staging/production deployments still fail with an explicit "no provider
-  configured" reason — both are truthful, actionable failures.
+  Staging/production deployments are real when `VERCEL_TOKEN` is set — Vercel
+  builds and hosts the generated files and the record keeps the genuine URL and
+  readyState; otherwise they fail with an explicit "no provider configured"
+  reason — all truthful, actionable failures.
 - Workers run **isolated** from the Next.js server.
 - CPU-risky work (npm install/test/build/lint, git) runs in a **sandbox worker**, never on the main server.
 
@@ -347,8 +349,17 @@ to a repository via the Git Data API and records the real repo URL + commit
 sha. Install is exempted from the repair loop because it can fail for
 environmental reasons rather than code bugs.
 
-**Phase 4 — Release** (in progress)
+**Phase 4 — Release** (real Vercel deploys implemented; monitoring + analytics next)
 Deployment → Monitoring → Usage/analytics
+
+Implemented: with `VERCEL_TOKEN` configured, the Deploy stage (`/deploy`)
+provisions staging + production **for real** — the worker uploads the actual
+generated files to Vercel via the Deployments API, keeps the genuine
+`*.vercel.app` URL, and the record stays BUILDING (with the real URL shown)
+until Vercel reports READY, which the editor route verifies against the
+provider on every poll and only then marks the environment ready. Without the
+token, deploys fail with an explicit, actionable "set VERCEL_TOKEN" reason and
+never fabricate a URL.
 
 **Phase 5 — Advanced**
 Advanced agents → Workflow engine → Integrations → Business AI (email, payments, etc.)
@@ -387,8 +398,13 @@ stage extends the exact same discipline:
   `*.vercel.app` guess or fake websocket.
 - **Deploy** (`/deploy`, `deploy/editor` GET + `deploy/create` POST): requires
   ≥1 READY preview. `deploy/create` writes real `Deployment` rows for
-  `staging`/`production`; the worker fails these honestly when no
-  deployment provider is configured (explicit reason, `deploymentUrl` null).
+  `staging`/`production`. With `VERCEL_TOKEN` set, the worker provisions the
+  real generated files on Vercel (Deployments API, inline base64 upload), keeps
+  the genuine `*.vercel.app` URL, records `vercelDeploymentId` + target in
+  metadata, and stays BUILDING until Vercel reports READY (the editor route
+  reconciles against the real provider each poll). Without a token it fails
+  honestly with an explicit reason and `deploymentUrl` null — never a guessed
+  URL.
 - **Code** (`/code`, `code/editor` GET + `code/repair` + `code/publish` POST):
   requires an APPROVED blueprint. `code/editor` returns the real `ProjectArtifact`
   rows (newest per path) with content read from the worker's sandbox — files

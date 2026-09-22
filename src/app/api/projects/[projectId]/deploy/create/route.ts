@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { getProject } from "@/server/db/projects";
 import { READY_DEPLOYMENT_STATUSES, IN_FLIGHT_DEPLOYMENT_STATUSES } from "@/lib/pipeline";
 import { createDeploymentSchema } from "@/validations/pipeline";
+import { vercelConfig } from "@/server/vercel/client";
 import {
   apiAccepted,
   apiUnauthorized,
@@ -80,7 +81,7 @@ export async function POST(
       data: {
         projectId,
         environment,
-        provider: "unconfigured",
+        provider: vercelConfig().token ? "vercel" : "unconfigured",
         status: "PENDING",
         deploymentUrl: null,
       },
@@ -91,7 +92,9 @@ export async function POST(
       status: "queued",
       deploymentId: deployment.id,
       environment,
-      message: `${environment} deployment queued. A URL appears once provisioning completes.`,
+      message: vercelConfig().token
+        ? `${environment} deployment queued on Vercel. A URL appears once provisioning completes.`
+        : `${environment} deployment queued. It will fail with an explicit reason until VERCEL_TOKEN is configured.`,
     });
   } catch (error) {
     console.error("Error creating deployment:", error);

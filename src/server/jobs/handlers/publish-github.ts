@@ -41,7 +41,7 @@ function slugifyRepo(input: string): string {
 }
 
 /** Latest artifact per path, oldest versions dropped (mirrors the code screen). */
-async function loadPublishableFiles(projectId: string) {
+export async function loadPublishableFiles(projectId: string) {
   const artifacts = await prisma.projectArtifact.findMany({
     where: { projectId },
     orderBy: { createdAt: "desc" },

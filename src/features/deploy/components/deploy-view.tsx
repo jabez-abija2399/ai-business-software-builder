@@ -51,14 +51,33 @@ function Environment({
               {latest.deploymentUrl}
               <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
             </a>
+          ) : inflight && latest.deploymentUrl ? (
+            <a
+              href={latest.deploymentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 break-all font-medium text-primary underline-offset-4 hover:underline"
+            >
+              {latest.deploymentUrl}
+              <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+            </a>
           ) : ready ? (
             <p className="font-medium text-warning-foreground">
               The environment reported ready but no URL was provisioned.
             </p>
           ) : inflight ? (
-            <p>Deployment in progress. Status updates when the deployment record changes.</p>
+            <p>Deployment in progress. Status updates when the provider finishes building.</p>
           ) : failed ? (
-            <p className="font-medium text-destructive">The last deployment failed and can be retried.</p>
+            <div>
+              <p className="font-medium text-destructive">
+                The last deployment failed and can be retried.
+              </p>
+              {typeof latest.metadata?.errorMessage === "string" && (
+                <p className="mt-1 leading-relaxed text-destructive/90">
+                  {latest.metadata.errorMessage}
+                </p>
+              )}
+            </div>
           ) : (
             <p>Last deployment {formatUpdatedAgo(latest.createdAt)}.</p>
           )}

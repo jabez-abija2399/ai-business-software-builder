@@ -165,6 +165,36 @@ export async function completeDeployment(
   });
 }
 
+/**
+ * Flexible settlement for real proto deployments (e.g. Vercel): can record a
+ * truthful intermediate state (BUILDING) with the real provider URL and the
+ * provider's deployment id in metadata, then terminal READY/FAILED with the
+ * genuine reason. Only writes completedAt for terminal states.
+ */
+export interface SettleDeploymentPatch {
+  status: string;
+  provider?: string;
+  deploymentUrl?: string | null;
+  metadataJson?: Prisma.InputJsonValue;
+  completedAt?: Date | null;
+}
+
+export async function settleDeployment(
+  id: string,
+  patch: SettleDeploymentPatch
+): Promise<void> {
+  await prisma.deployment.update({
+    where: { id },
+    data: {
+      status: patch.status,
+      provider: patch.provider,
+      deploymentUrl: patch.deploymentUrl ?? null,
+      metadataJson: patch.metadataJson,
+      completedAt: patch.completedAt ?? null,
+    },
+  });
+}
+
 export async function failDeployment(
   id: string,
   errorMessage: string,
